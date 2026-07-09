@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+body {
+  background-color: #050505; /* Deep, pure dark base */
+  color: #fafafa;
+  /* Crystal clear dot matrix background, absolutely no blur */
+  background-image: radial-gradient(circle at center, #27272a 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Custom autofill styles for dark mode inputs so they don't turn white */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active{
+    -webkit-box-shadow: 0 0 0 30px #0a0a0a inset !important;
+    -webkit-text-fill-color: #fafafa !important;
+}

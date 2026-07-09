@@ -1,0 +1,102 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"] 
+}
+
+datasource db {
+  provider = "postgresql"
+  // The url line has been completely removed to comply with Prisma v7
+}
+
+// --- ENUMS ---
+enum Role {
+  DESIGNER
+  CLIENT
+}
+
+enum ProjectStatus {
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+// --- MODELS ---
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String    
+  role         Role      @default(CLIENT)
+  createdAt    DateTime  @default(now())
+  
+  projectsOwned Project[]       @relation("ProjectOwner")
+  comments      Comment[]
+  memberOf      ProjectMember[] // NEW: Projects they are invited to!
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  status      ProjectStatus @default(IN_REVIEW)
+  inviteToken String?       @unique // NEW: The secure random string for the magic link
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  isDownloadUnlocked Boolean @default(false)
+  activityLogs ActivityLog[]
+  
+  ownerId     String
+  owner       User          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  assets      Asset[]
+  members     ProjectMember[] // NEW: List of invited collaborators
+}
+
+// --- NEW TABLE ---
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // This prevents the same user from joining the exact same project twice
+  @@unique([projectId, userId]) 
+}
+
+model Asset {
+  id        String   @id @default(cuid())
+  fileUrl   String
+  fileName  String? 
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  comments  Comment[]
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  text       String
+  xPos       Float    
+  yPos       Float    
+  isResolved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  
+  assetId    String
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  action    String   // e.g., "UPLOAD", "COMMENT", "RESOLVE", "STATUS"
+  details   String   // e.g., "Client dropped a new feedback pin."
+  createdAt DateTime @default(now())
+}
