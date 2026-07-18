@@ -1,9 +1,11 @@
+// web/components/PdfEngine.tsx
 "use client";
 
 import { useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// PHASE 4: Localized Worker. App no longer crashes if Unpkg CDN goes down.
+pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 
 export default function PdfEngine({ fileUrl, onLoad }: { fileUrl: string, onLoad: (pages: number) => void }) {
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -14,15 +16,14 @@ export default function PdfEngine({ fileUrl, onLoad }: { fileUrl: string, onLoad
         file={fileUrl}
         onLoadSuccess={({ numPages }) => {
           setNumPages(numPages);
-          if (onLoad) onLoad(numPages); // Send the total pages back to the Workspace!
+          if (onLoad) onLoad(numPages); 
         }}
         loading={<div className="text-emerald-500 font-mono text-xs animate-pulse p-20 text-center uppercase tracking-widest">Compiling PDF Engine...</div>}
       >
-        {/* Render ALL pages sequentially */}
         {Array.from(new Array(numPages || 0), (el, index) => (
           <div 
             key={`page_${index + 1}`} 
-            id={`pdf-page-${index + 1}`} // We use this ID to calculate the exact scroll jump!
+            id={`pdf-page-${index + 1}`}
             className="bg-white border-b-8 border-[#0a0a0a] shadow-2xl"
           >
             <Page
