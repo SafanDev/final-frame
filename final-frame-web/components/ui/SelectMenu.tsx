@@ -133,7 +133,7 @@ export default function SelectMenu<T extends string>({
 
   return (
     <div ref={rootRef} className={cn("relative", className)} data-pin-ignore="true">
-      <label htmlFor={buttonId} className={hideLabel ? "sr-only" : "mb-2 block text-sm font-semibold text-zinc-200"}>
+      <label htmlFor={buttonId} className={hideLabel ? "sr-only" : "mb-2 block text-sm font-semibold text-[var(--text)]"}>
         {label}
       </label>
       <button
@@ -151,12 +151,12 @@ export default function SelectMenu<T extends string>({
         }}
         onKeyDown={handleButtonKeyDown}
         className={cn(
-          "flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-white/12 bg-[#111214] px-3.5 text-left text-sm font-semibold text-white outline-none transition hover:border-white/20 focus-visible:border-emerald-300 focus-visible:ring-2 focus-visible:ring-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-50",
+          "flex min-h-11 w-full items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--surface-subtle)] px-3.5 text-left text-sm font-semibold text-[var(--text)] outline-none transition hover:border-[var(--border-emphasis)] hover:bg-[var(--surface)] focus-visible:border-[var(--focus)] focus-visible:ring-2 focus-visible:ring-[color:rgb(165_239_210_/_16%)] disabled:cursor-not-allowed disabled:opacity-50",
           buttonClassName,
         )}
       >
         <span className="min-w-0 truncate">{selected?.label ?? "Select"}</span>
-        <span aria-hidden="true" className={`shrink-0 text-zinc-500 transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
+        <span aria-hidden="true" className={`shrink-0 text-[var(--text-subtle)] transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
       </button>
 
       {open ? (
@@ -165,7 +165,7 @@ export default function SelectMenu<T extends string>({
           role="listbox"
           aria-label={label}
           className={cn(
-            "absolute z-[120] mt-2 max-h-72 w-full min-w-[12rem] overflow-y-auto rounded-xl border border-white/12 bg-[#111214] p-1.5 shadow-[0_16px_45px_rgba(0,0,0,0.48)]",
+            "absolute z-[120] mt-2 max-h-72 w-full min-w-[12rem] overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border-strong)] bg-[var(--surface-raised)] p-1.5 shadow-[var(--shadow-md)]",
             menuClassName,
           )}
         >
@@ -182,16 +182,16 @@ export default function SelectMenu<T extends string>({
               onClick={() => choose(option.value)}
               onKeyDown={(event) => handleOptionKeyDown(event, index)}
               className={cn(
-                "flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-300/50",
+                "flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--focus)]",
                 option.value === value
-                  ? "bg-emerald-400 text-zinc-950"
-                  : "text-zinc-200 hover:bg-white/[0.06]",
+                  ? "bg-[var(--accent)] text-[var(--accent-ink)]"
+                  : "text-[var(--text-muted)] hover:bg-white/[0.055] hover:text-[var(--text)]",
                 option.disabled && "cursor-not-allowed opacity-45",
               )}
             >
               <span className="min-w-0">
                 <span className="block truncate font-semibold">{option.label}</span>
-                {option.description ? <span className={`mt-0.5 block text-xs ${option.value === value ? "text-zinc-800" : "text-zinc-500"}`}>{option.description}</span> : null}
+                {option.description ? <span className={`mt-0.5 block text-xs ${option.value === value ? "text-[#1f362e]" : "text-[var(--text-subtle)]"}`}>{option.description}</span> : null}
               </span>
               {option.value === value ? <span aria-hidden="true">✓</span> : null}
             </button>

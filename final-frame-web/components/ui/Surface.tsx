@@ -8,13 +8,23 @@ interface SurfaceProps extends HTMLAttributes<HTMLElement> {
   interactive?: boolean;
 }
 
-export default function Surface({ as: Component = "div", children, elevated = false, interactive = false, className, ...props }: SurfaceProps) {
+export default function Surface({
+  as: Component = "div",
+  children,
+  elevated = false,
+  interactive = false,
+  className,
+  ...props
+}: SurfaceProps) {
   return (
     <Component
       className={cn(
-        "rounded-2xl border border-white/10 bg-[rgba(12,13,15,0.88)]",
-        elevated ? "shadow-[0_16px_45px_rgba(0,0,0,0.24)]" : "shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
-        interactive && "transition duration-200 hover:border-white/18 hover:bg-[rgba(16,17,20,0.94)]",
+        "rounded-[var(--radius-xl)] border bg-[var(--surface)]",
+        elevated
+          ? "border-[var(--border-strong)] shadow-[var(--shadow-md)]"
+          : "border-[var(--border)] shadow-[var(--shadow-sm)]",
+        interactive &&
+          "transition-[background-color,border-color,box-shadow] duration-200 hover:border-[var(--border-strong)] hover:bg-[var(--surface-hover)]",
         className,
       )}
       {...props}

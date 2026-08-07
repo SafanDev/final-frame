@@ -11,15 +11,20 @@ interface EmptyStateProps {
 
 export default function EmptyState({ icon, title, description, action, compact = false }: EmptyStateProps) {
   return (
-    <Surface className={`border-dashed text-center ${compact ? "px-5 py-8" : "px-6 py-14 sm:py-16"}`}>
+    <Surface className={`border-dashed text-center ${compact ? "px-5 py-8" : "px-6 py-12 sm:py-14"}`}>
       {icon ? (
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-2xl text-zinc-400" aria-hidden="true">
+        <div
+          className="mx-auto flex h-12 w-12 items-center justify-center rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface-raised)] text-xl text-[var(--text-muted)]"
+          aria-hidden="true"
+        >
           {icon}
         </div>
       ) : null}
-      <h3 className={`${icon ? "mt-5" : ""} text-xl font-bold tracking-tight text-white`}>{title}</h3>
-      <div className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-400">{description}</div>
-      {action ? <div className="mt-6 flex justify-center">{action}</div> : null}
+      <h3 className={`${icon ? "mt-4" : ""} text-lg font-semibold tracking-[-0.02em] text-[var(--text)]`}>
+        {title}
+      </h3>
+      <div className="mx-auto mt-2 max-w-xl text-sm leading-6 text-[var(--text-muted)]">{description}</div>
+      {action ? <div className="mt-5 flex justify-center">{action}</div> : null}
     </Surface>
   );
 }

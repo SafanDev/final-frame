@@ -1,0 +1,191 @@
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--background);
+  color-scheme: dark;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+:where(h1, h2, h3, h4, p) {
+  overflow-wrap: break-word;
+}
+
+:where(h1, h2, h3) {
+  text-wrap: balance;
+}
+
+:where(p, li) {
+  text-wrap: pretty;
+}
+
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+:where(input, textarea, select):focus-visible {
+  outline-offset: 1px;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --radius-xl: 1rem;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: rgb(255 255 255 / 24%);
+    --border-strong: rgb(255 255 255 / 38%);
+    --text-muted: #d5d9df;
+    --text-subtle: #c1c6ce;
+  }
+
+  :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline-width: 3px;
+  }
+}
+
+@media (forced-colors: active) {
+  * {
+    forced-color-adjust: auto;
+  }
+
+  body,
+  header,
+  footer,
+  main,
+  section,
+  aside,
+  article,
+  nav {
+    background-color: Canvas !important;
+    color: CanvasText !important;
+  }
+
+  :where(h1, h2, h3, h4, h5, h6, p, span, li, label, small, strong, em) {
+    color: CanvasText !important;
+  }
+
+  a,
+  a * {
+    color: LinkText !important;
+  }
+
+  button,
+  button *,
+  input,
+  textarea,
+  select,
+  summary,
+  summary * {
+    color: ButtonText !important;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    border-color: ButtonText !important;
+    background-color: ButtonFace !important;
+  }
+
+  :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline: 3px solid Highlight !important;
+    outline-offset: 3px;
+  }
+
+  .ff-panel,
+  .ff-panel-raised,
+  .finalframe-toast {
+    border: 1px solid CanvasText !important;
+    background: Canvas !important;
+    color: CanvasText !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  header,
+  nav,
+  .skip-link,
+  [data-no-print="true"] {
+    display: none !important;
+  }
+}

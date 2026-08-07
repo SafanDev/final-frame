@@ -60,7 +60,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   colorScheme: "dark",
-  themeColor: "#0a0a0b",
+  themeColor: "#090a0c",
 };
 
 export default async function RootLayout({
@@ -70,8 +70,8 @@ export default async function RootLayout({
   await connection();
 
   return (
-    <html lang="en" className="bg-[#0a0a0b]">
-      <body className="min-h-screen bg-[#0a0a0b] font-sans text-zinc-100 antialiased">
+    <html lang="en">
+      <body>
         <WebVitalsReporter />
         <AuthProvider>
           <a className="skip-link" href="#main-content">

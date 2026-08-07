@@ -156,7 +156,7 @@ export default function Dialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1000] flex items-end justify-center overflow-y-auto bg-black/78 px-3 pb-3 pt-10 backdrop-blur-md sm:items-center sm:px-4 sm:py-8"
+      className="fixed inset-0 z-[1000] flex items-end justify-center overflow-y-auto bg-black/72 px-3 pb-3 pt-10 backdrop-blur-sm sm:items-center sm:px-4 sm:py-8"
       onMouseDown={handleBackdropMouseDown}
       data-dialog-root="true"
     >
@@ -168,16 +168,15 @@ export default function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         aria-busy={busy || undefined}
         tabIndex={-1}
-        className={`relative max-h-[calc(100dvh-1.5rem)] w-full ${maxWidthClassName} overflow-hidden rounded-2xl border border-white/14 bg-[rgba(12,13,15,0.98)] shadow-[0_36px_120px_rgba(0,0,0,0.72)] sm:max-h-[calc(100dvh-4rem)]`}
+        className={`relative max-h-[calc(100dvh-1.5rem)] w-full ${maxWidthClassName} overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border-strong)] bg-[var(--surface-raised)] shadow-[var(--shadow-lg)] sm:max-h-[calc(100dvh-4rem)]`}
       >
-        <div className="h-px bg-emerald-300/70" aria-hidden="true" />
-        <div className="flex items-start justify-between gap-6 border-b border-white/10 px-5 py-5 sm:px-7">
+        <div className="flex items-start justify-between gap-6 border-b border-[var(--border)] px-5 py-5 sm:px-7">
           <div className="min-w-0">
-            <h2 id={titleId} className="text-xl font-bold tracking-[-0.025em] text-white sm:text-2xl">
+            <h2 id={titleId} className="text-xl font-semibold tracking-[-0.025em] text-[var(--text)] sm:text-2xl">
               {title}
             </h2>
             {description ? (
-              <p id={descriptionId} className="mt-2 max-w-prose text-sm leading-6 text-zinc-400">
+              <p id={descriptionId} className="mt-2 max-w-prose text-sm leading-6 text-[var(--text-muted)]">
                 {description}
               </p>
             ) : null}
@@ -188,14 +187,14 @@ export default function Dialog({
             onClick={onClose}
             disabled={busy}
             aria-label={closeLabel}
-            className="-mr-1 -mt-1 text-xl text-zinc-400"
+            className="-mr-1 -mt-1 text-lg"
           >
             <span aria-hidden="true">×</span>
           </Button>
         </div>
         <div className="max-h-[calc(100dvh-13rem)] overflow-y-auto overscroll-contain px-5 py-6 sm:px-7">{children}</div>
         {footer ? (
-          <div className="ff-safe-bottom flex flex-col-reverse gap-3 border-t border-white/10 bg-white/[0.025] px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
+          <div className="ff-safe-bottom flex flex-col-reverse gap-3 border-t border-[var(--border)] bg-[var(--surface-subtle)] px-5 py-4 sm:flex-row sm:justify-end sm:px-7">
             {footer}
           </div>
         ) : null}

@@ -1,0 +1,56 @@
+:root {
+  color-scheme: dark;
+
+  /* Core palette */
+  --background: #090a0c;
+  --background-elevated: #0c0e11;
+  --surface-subtle: #0d0f12;
+  --surface: #111318;
+  --surface-raised: #16191f;
+  --surface-hover: #1b1f26;
+  --surface-active: #20252d;
+  --canvas: #f3f1ec;
+
+  /* Borders */
+  --border: rgb(255 255 255 / 8%);
+  --border-strong: rgb(255 255 255 / 14%);
+  --border-emphasis: rgb(255 255 255 / 22%);
+
+  /* Type */
+  --text: #f5f7fa;
+  --text-muted: #b0b6c0;
+  --text-subtle: #9299a6;
+  --text-disabled: #6f7682;
+
+  /* Semantic accents */
+  --accent: #79ddb5;
+  --accent-hover: #8be6c1;
+  --accent-strong: #54c99a;
+  --accent-soft: rgb(121 221 181 / 12%);
+  --accent-ink: #062a20;
+  --info: #80c8ee;
+  --warning: #f3c66d;
+  --danger: #ef9aa4;
+  --focus: #a5efd2;
+  --focus-ring: rgb(165 239 210 / 16%);
+
+  /* Shape and depth */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --shadow-sm: 0 8px 24px rgb(0 0 0 / 18%);
+  --shadow-md: 0 18px 48px rgb(0 0 0 / 28%);
+  --shadow-lg: 0 30px 88px rgb(0 0 0 / 42%);
+
+  /* Layout */
+  --content-width: 80rem;
+  --control-height-sm: 2.5rem;
+  --control-height-md: 2.75rem;
+  --control-height-lg: 3rem;
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 140ms;
+  --duration-normal: 200ms;
+}
