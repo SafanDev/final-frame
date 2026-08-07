@@ -113,6 +113,11 @@ jobs:
             final-frame-api/package-lock.json
             final-frame-web/package-lock.json
 
+      - name: Install asset processing runtime tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg ghostscript poppler-utils
+
       - name: Start disposable object storage and malware scanner
         run: |
           docker run --rm -d --name finalframe-ci-minio \
