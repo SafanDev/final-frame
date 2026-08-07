@@ -1,81 +1,1156 @@
 /* Product surfaces */
 .ff-dashboard-page {
-  position: relative;
+  max-width: 72rem;
+  padding-block: clamp(2.5rem, 5vw, 4.5rem) 5rem;
 }
 
-.ff-dashboard-page::before {
-  position: fixed;
-  z-index: -1;
-  inset: 4rem 0 auto;
-  height: 34rem;
-  pointer-events: none;
-  content: "";
-  background:
-    radial-gradient(circle at 20% 0%, rgb(110 231 183 / 11%), transparent 28rem),
-    radial-gradient(circle at 85% 25%, rgb(125 211 252 / 7%), transparent 26rem);
+.ff-dashboard-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
 }
 
-.ff-dashboard-hero {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 1.35rem;
-  background:
-    linear-gradient(140deg, rgb(255 255 255 / 5%), transparent 45%),
-    rgb(14 16 19 / 92%);
-  padding: clamp(1.3rem, 4vw, 2.25rem);
-  box-shadow: 0 28px 90px rgb(0 0 0 / 25%);
+.ff-dashboard-heading-copy {
+  min-width: 0;
 }
 
-.ff-dashboard-hero::after {
-  position: absolute;
-  z-index: -1;
-  top: -8rem;
-  right: -5rem;
-  width: 24rem;
-  height: 24rem;
+.ff-dashboard-kicker {
+  margin-bottom: 0.55rem;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 680;
+}
+
+.ff-dashboard-header h1 {
+  color: var(--text);
+  font-size: clamp(2.2rem, 4vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.052em;
+  line-height: 1;
+}
+
+.ff-dashboard-welcome {
+  margin-top: 0.7rem;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.ff-dashboard-create {
+  flex: 0 0 auto;
+  box-shadow: 0 8px 30px rgb(79 209 161 / 8%);
+}
+
+.ff-dashboard-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 2rem;
+}
+
+.ff-dashboard-stat {
+  display: inline-flex;
+  min-height: 2.4rem;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  content: "";
-  background: radial-gradient(circle, rgb(110 231 183 / 15%), transparent 68%);
+  background: var(--surface-subtle);
+  padding: 0.38rem 0.5rem 0.38rem 0.8rem;
+  color: var(--text-muted);
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.ff-dashboard-stat:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.ff-dashboard-stat.is-active {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.ff-dashboard-stat span {
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.ff-dashboard-stat strong {
+  display: inline-grid;
+  min-width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 5%);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.ff-dashboard-stat.is-active strong {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-hover);
+}
+
+.ff-dashboard-projects {
+  margin-top: clamp(2.5rem, 5vw, 3.5rem);
+}
+
+.ff-dashboard-tools {
+  margin-bottom: 1rem;
+}
+
+.ff-dashboard-tools-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+}
+
+.ff-dashboard-results-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.ff-dashboard-results-title h2 {
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: 730;
+  letter-spacing: -0.025em;
+}
+
+.ff-dashboard-results-title > span {
+  display: inline-grid;
+  min-width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-subtle);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.ff-dashboard-toolbar-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.ff-project-search {
+  width: min(19rem, 31vw);
+}
+
+.ff-project-sort {
+  width: 10.75rem;
+}
+
+.ff-filter-active-dot {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.ff-dashboard-filter-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-subtle);
+  padding: 0.9rem;
+  animation: ff-dashboard-panel-in 160ms var(--ease-standard) both;
+}
+
+.ff-dashboard-filter-reset {
+  align-self: end;
+  padding-bottom: 0.05rem;
+}
+
+.ff-dashboard-results {
+  margin-top: 1rem;
+}
+
+.ff-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 0.9rem;
 }
 
 .ff-project-card {
-  isolation: isolate;
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 9%);
+  position: relative;
+  display: flex;
+  min-height: 18rem;
+  flex-direction: column;
+  overflow: visible;
+  border: 1px solid var(--border);
   border-radius: 1rem;
-  background:
-    linear-gradient(150deg, rgb(255 255 255 / 4.5%), transparent 50%),
-    #101216;
-  box-shadow: 0 16px 48px rgb(0 0 0 / 15%);
-  transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+  background: var(--surface-subtle);
+  padding: 1rem;
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    box-shadow var(--duration-fast) ease;
 }
 
-.ff-project-card::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  content: "";
-  background: linear-gradient(180deg, #6ee7b7, transparent 72%);
-  opacity: 0.6;
+.ff-project-card:hover,
+.ff-project-card:focus-within {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-subtle) 94%, white);
+  box-shadow: 0 18px 45px rgb(0 0 0 / 16%);
 }
 
-.ff-project-card:hover {
-  border-color: rgb(110 231 183 / 22%);
-  box-shadow: 0 24px 65px rgb(0 0 0 / 27%);
-  transform: translateY(-0.25rem);
+.ff-project-card-top {
+  display: flex;
+  min-height: 2.35rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ff-project-card-badges {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ff-project-card-body {
+  margin-top: 1.6rem;
+}
+
+.ff-project-card-owner {
+  color: var(--text-subtle);
+  font-size: 0.7rem;
+  font-weight: 620;
+}
+
+.ff-project-card-body h3 {
+  margin-top: 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 760;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.ff-project-card-body h3 a {
+  display: inline;
+  border-radius: 0.3rem;
+  color: var(--text);
+  text-decoration: none;
+  transition: color var(--duration-fast) ease;
+}
+
+.ff-project-card-body h3 a:hover {
+  color: var(--accent-hover);
+}
+
+.ff-project-card-description {
+  display: -webkit-box;
+  min-height: 2.75rem;
+  margin-top: 0.65rem;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ff-project-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+  margin-top: 1.4rem;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+}
+
+.ff-project-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ff-project-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}
+
+.ff-project-card-footer time {
+  color: var(--text-subtle);
+  font-size: 0.7rem;
+  white-space: nowrap;
 }
 
 .ff-project-open {
-  border: 1px solid rgb(110 231 183 / 30%);
-  background: rgb(110 231 183 / 10%);
-  color: #b9f6de;
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  border-radius: var(--radius-md);
+  padding-inline: 0.7rem;
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 690;
+  text-decoration: none;
+  transition:
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.ff-project-open svg {
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 .ff-project-open:hover {
-  background: #6ee7b7;
-  color: #05261c;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+}
+
+.ff-project-open:hover svg {
+  transform: translateX(2px);
+}
+
+.ff-project-menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.ff-project-menu-trigger {
+  display: inline-grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-subtle);
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.ff-project-menu-trigger:hover,
+.ff-project-menu-trigger[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.ff-project-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  width: 12.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  padding: 0.35rem;
+  box-shadow: var(--shadow-md);
+  animation: ff-dashboard-menu-in 120ms var(--ease-standard) both;
+}
+
+.ff-project-menu button {
+  display: flex;
+  width: 100%;
+  min-height: 2.35rem;
+  align-items: center;
+  border-radius: 0.45rem;
+  padding-inline: 0.7rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 620;
+  text-align: left;
+}
+
+.ff-project-menu button:hover,
+.ff-project-menu button:focus-visible {
+  background: rgb(255 255 255 / 5%);
+  color: var(--text);
+}
+
+.ff-project-menu button:disabled {
+  cursor: not-allowed;
+  color: var(--text-disabled);
+  opacity: 0.55;
+}
+
+.ff-project-menu button.is-danger {
+  color: var(--danger);
+}
+
+.ff-project-menu button.is-danger:hover,
+.ff-project-menu button.is-danger:focus-visible {
+  background: rgb(239 154 164 / 9%);
+}
+
+.ff-project-menu-separator {
+  height: 1px;
+  margin-block: 0.25rem;
+  background: var(--border);
+}
+
+.ff-project-card-skeleton:hover,
+.ff-project-card-skeleton:focus-within {
+  transform: none;
+  border-color: var(--border);
+  background: var(--surface-subtle);
+  box-shadow: none;
+}
+
+.ff-dashboard-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+/* Account */
+.ff-account-page {
+  max-width: 68rem;
+  padding-block: clamp(2.5rem, 4vw, 3.5rem) 4.5rem;
+}
+
+.ff-account-header {
+  max-width: 28rem;
+}
+
+.ff-account-header h1,
+.ff-inbox-header h1 {
+  color: var(--text);
+  font-size: clamp(2.15rem, 3.8vw, 2.9rem);
+  font-weight: 800;
+  letter-spacing: -0.052em;
+  line-height: 1;
+}
+
+.ff-account-header > p,
+.ff-inbox-header > p {
+  margin-top: 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.ff-account-load-error {
+  max-width: 36rem;
+  padding-block: 3rem;
+}
+
+.ff-account-alert,
+.ff-account-recovery-alert {
+  width: min(100%, 36rem);
+  margin-top: 1.25rem;
+}
+
+.ff-account-alert,
+.ff-account-compact-alert {
+  padding: 0.72rem 0.8rem !important;
+}
+
+.ff-account-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) repeat(2, minmax(8rem, 0.65fr));
+  gap: 0.8rem;
+  margin-top: 1.75rem;
+}
+
+.ff-account-summary-card,
+.ff-account-card,
+.ff-account-action-card {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface-subtle);
+}
+
+.ff-account-summary-card {
+  min-width: 0;
+  padding: 1rem 1.1rem;
+}
+
+.ff-account-summary-card > span {
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  font-weight: 680;
+}
+
+.ff-account-summary-card > strong {
+  display: block;
+  margin-top: 0.4rem;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 740;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+}
+
+.ff-account-summary-card > p {
+  margin-top: 0.2rem;
+  overflow-wrap: anywhere;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.ff-account-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.ff-account-card {
+  margin: 0;
+  padding: 1.15rem;
+}
+
+.ff-account-preferences-card {
+  grid-column: 1 / -1;
+}
+
+.ff-account-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ff-account-card h2,
+.ff-account-actions-panel > .ff-account-card-heading h2 {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 740;
+  letter-spacing: -0.025em;
+}
+
+.ff-account-card-description,
+.ff-account-action-card p {
+  margin-top: 0.25rem;
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.ff-account-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.ff-account-note span {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.ff-account-compact-alert {
+  max-width: 34rem;
+  margin-top: 0.85rem;
+}
+
+.ff-account-preference-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr 1fr;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.ff-account-security-card,
+.ff-account-actions-panel {
+  min-height: 100%;
+}
+
+.ff-account-security-card {
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+}
+
+.ff-account-security-heading {
+  align-items: center;
+}
+
+.ff-account-security-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ff-account-status {
+  display: inline-flex;
+  min-height: 1.7rem;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding-inline: 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.ff-account-status.is-on {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  color: var(--accent);
+}
+
+.ff-account-security-panel {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  animation: ff-account-panel-in 160ms var(--ease-standard) both;
+}
+
+.ff-account-mfa-form,
+.ff-account-mfa-setup {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.ff-account-mfa-key {
+  display: grid;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--surface);
+  padding: 0.8rem;
+}
+
+.ff-account-mfa-key > span {
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  font-weight: 680;
+}
+
+.ff-account-mfa-key code {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.ff-account-mfa-key a {
+  width: max-content;
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.ff-account-mfa-key a:hover {
+  text-decoration: underline;
+}
+
+.ff-account-actions-panel {
+  padding: 1.15rem;
+}
+
+.ff-account-actions-grid {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+}
+
+.ff-account-action-card {
+  padding: 0.82rem;
+  transition:
+    border-color var(--duration-fast) ease,
+    background-color var(--duration-fast) ease;
+}
+
+.ff-account-action-card:hover,
+.ff-account-action-card:focus-within {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.ff-account-action-card.is-danger {
+  border-color: color-mix(in srgb, var(--danger) 18%, var(--border));
+}
+
+.ff-account-action-card.is-danger:hover,
+.ff-account-action-card.is-danger:focus-within {
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+}
+
+.ff-account-action-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.ff-account-action-copy {
+  min-width: 0;
+}
+
+.ff-account-action-copy h3 {
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 720;
+  letter-spacing: -0.015em;
+}
+
+.ff-account-action-copy p {
+  max-width: 24rem;
+  margin-top: 0.16rem;
+  color: var(--text-subtle);
+  font-size: 0.69rem;
+  line-height: 1.4;
+}
+
+.ff-account-action-panel {
+  margin-top: 0.8rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.8rem;
+  animation: ff-account-panel-in 160ms var(--ease-standard) both;
+}
+
+.ff-account-action-alert {
+  margin-bottom: 0.75rem;
+  padding: 0.7rem 0.75rem !important;
+}
+
+.ff-account-action-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+}
+
+.ff-account-action-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+/* Inbox */
+.ff-inbox-page {
+  max-width: 68rem;
+  padding-block: clamp(2.5rem, 4vw, 3.5rem) 4.5rem;
+}
+
+.ff-inbox-header {
+  max-width: 28rem;
+}
+
+.ff-inbox-content {
+  margin-top: 2rem;
+}
+
+.ff-inbox-loading {
+  padding-block: 1.5rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.ff-inbox-toolbar {
+  display: flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.9rem;
+}
+
+.ff-inbox-toolbar p {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.ff-inbox-alert {
+  width: min(100%, 34rem);
+  margin-top: 1rem;
+  padding: 0.72rem 0.8rem !important;
+}
+
+.ff-inbox-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ff-inbox-item {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface-subtle);
+  transition:
+    border-color var(--duration-fast) ease,
+    background-color var(--duration-fast) ease,
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.ff-inbox-item:hover,
+.ff-inbox-item:focus-within {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+
+.ff-inbox-item.is-unread {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+}
+
+.ff-inbox-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.85rem;
+  align-items: start;
+  padding: 1rem 1.05rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.ff-inbox-dot {
+  width: 0.48rem;
+  height: 0.48rem;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background: var(--text-subtle);
+}
+
+.ff-inbox-item.is-unread .ff-inbox-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.ff-inbox-item-main {
+  min-width: 0;
+}
+
+.ff-inbox-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ff-inbox-item-head h2 {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 730;
+  letter-spacing: -0.015em;
+}
+
+.ff-inbox-item-head time {
+  flex: 0 0 auto;
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+}
+
+.ff-inbox-item-main > p {
+  max-width: 44rem;
+  margin-top: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.ff-inbox-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+  margin-top: 0.55rem;
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+}
+
+.ff-inbox-arrow {
+  margin-top: 0.05rem;
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+  transition: transform var(--duration-fast) var(--ease-standard), color var(--duration-fast) ease;
+}
+
+.ff-inbox-item:hover .ff-inbox-arrow,
+.ff-inbox-item:focus-within .ff-inbox-arrow {
+  color: var(--accent);
+  transform: translate(2px, -2px);
+}
+
+.ff-inbox-empty {
+  width: min(100%, 29rem);
+  margin: clamp(3rem, 8vh, 5rem) auto 0;
+  border: 1px solid var(--border);
+  border-radius: 1.1rem;
+  background: var(--surface-subtle);
+  padding: 2rem;
+  text-align: center;
+}
+
+.ff-inbox-empty-mark {
+  display: grid;
+  width: 2.3rem;
+  height: 2.3rem;
+  margin-inline: auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.ff-inbox-empty h2 {
+  margin-top: 0.9rem;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 740;
+}
+
+.ff-inbox-empty p {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.ff-inbox-empty a {
+  display: inline-flex;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.ff-inbox-empty a:hover span {
+  transform: translate(2px, -2px);
+}
+
+.ff-inbox-empty a span {
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+
+.ff-inbox-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+@keyframes ff-account-panel-in {
+  from { opacity: 0; transform: translateY(-0.25rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ff-dashboard-panel-in {
+  from { opacity: 0; transform: translateY(-0.25rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ff-dashboard-menu-in {
+  from { opacity: 0; transform: translateY(-0.2rem) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 900px) {
+  .ff-dashboard-tools-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ff-dashboard-toolbar-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ff-project-search {
+    width: 100%;
+    flex: 1 1 15rem;
+  }
+
+  .ff-dashboard-filter-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ff-dashboard-filter-reset {
+    grid-column: 1 / -1;
+  }
+
+  .ff-account-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ff-account-summary-card.is-profile,
+  .ff-account-preferences-card {
+    grid-column: 1 / -1;
+  }
+
+  .ff-account-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .ff-account-preference-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ff-account-preference-grid > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 700px) {
+  .ff-dashboard-page,
+  .ff-account-page,
+  .ff-inbox-page {
+    padding-block: 1.75rem 3rem;
+  }
+
+  .ff-dashboard-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .ff-dashboard-header h1,
+  .ff-account-header h1,
+  .ff-inbox-header h1 {
+    font-size: 2.2rem;
+  }
+
+  .ff-dashboard-create {
+    width: 100%;
+  }
+
+  .ff-dashboard-stats {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+    scrollbar-width: none;
+  }
+
+  .ff-dashboard-stats::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ff-dashboard-stat {
+    flex: 0 0 auto;
+  }
+
+  .ff-dashboard-projects {
+    margin-top: 2.25rem;
+  }
+
+  .ff-dashboard-toolbar-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ff-project-sort {
+    width: 100%;
+  }
+
+  .ff-dashboard-filter-panel,
+  .ff-account-summary,
+  .ff-account-preference-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ff-account-summary-card.is-profile,
+  .ff-account-preferences-card,
+  .ff-account-preference-grid > :first-child {
+    grid-column: auto;
+  }
+
+  .ff-project-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ff-project-card {
+    min-height: 16.5rem;
+  }
+
+  .ff-project-card-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ff-account-card-heading,
+  .ff-account-security-heading {
+    align-items: stretch;
+  }
+
+  .ff-account-security-heading {
+    flex-direction: column;
+  }
+
+  .ff-account-security-actions {
+    justify-content: space-between;
+  }
+
+  .ff-account-action-head {
+    align-items: flex-start;
+  }
+
+  .ff-inbox-content {
+    margin-top: 1.5rem;
+  }
+
+  .ff-inbox-item-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .ff-inbox-empty {
+    margin-top: 2.5rem;
+    padding: 1.6rem 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-dashboard-filter-panel,
+  .ff-project-menu,
+  .ff-account-security-panel,
+  .ff-account-action-panel {
+    animation: none;
+  }
+
+  .ff-dashboard-stat,
+  .ff-project-card,
+  .ff-project-open svg,
+  .ff-account-action-card,
+  .ff-inbox-item,
+  .ff-inbox-arrow,
+  .ff-inbox-empty a span {
+    transition: none;
+  }
 }
 
 .ff-workspace-shell {

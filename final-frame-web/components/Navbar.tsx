@@ -11,11 +11,13 @@ import MenuIcon from "@/components/navigation/MenuIcon";
 import NavItem from "@/components/navigation/NavItem";
 import Button from "@/components/ui/Button";
 import { cn } from "@/lib/utils/cn";
+import { isProductRoute } from "@/lib/utils/productRoutes";
 
 export default function Navbar() {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const productRoute = isProductRoute(pathname);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -66,7 +68,7 @@ export default function Navbar() {
   }
 
   return (
-    <header className="ff-site-header ff-safe-top">
+    <header className={cn("ff-site-header ff-safe-top", productRoute && "is-product")}>
       <nav aria-label="Primary navigation" className="ff-container ff-site-nav">
         <BrandLink />
 
@@ -88,9 +90,11 @@ export default function Navbar() {
           id="primary-menu"
           className={cn("ff-nav-menu", isMenuOpen ? "is-open" : "")}
         >
-          <NavItem href="/" active={pathname === "/"}>
-            Home
-          </NavItem>
+          {!productRoute ? (
+            <NavItem href="/" active={pathname === "/"}>
+              Home
+            </NavItem>
+          ) : null}
 
           {status === "loading" ? (
             <span className="ff-nav-loading" role="status">

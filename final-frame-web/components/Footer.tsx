@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import BrandLink from "@/components/navigation/BrandLink";
+import { isProductRoute } from "@/lib/utils/productRoutes";
 
 const trustLinks = [
   ["Security", "/security"],
@@ -13,7 +14,7 @@ const trustLinks = [
 
 export default function Footer() {
   const pathname = usePathname();
-  if (pathname.startsWith("/project/")) return null;
+  if (pathname.startsWith("/project/") || isProductRoute(pathname)) return null;
 
   return (
     <footer className="ff-site-footer">
