@@ -6,7 +6,7 @@ import { registerHref, safeRelativeCallback } from "@/lib/auth/redirects";
 
 export const metadata: Metadata = {
   title: "Sign in",
-  description: "Sign in to your private FinalFrame design review workspace.",
+  description: "Sign in to FinalFrame.",
   alternates: { canonical: "/login" },
   robots: { index: false, follow: false },
 };
@@ -28,12 +28,12 @@ export default async function LoginPage({
 
   return (
     <AuthShell
+      variant="login"
       title="Sign in"
-      description="Open your projects and keep the review moving."
       footer={
         <>
           New to FinalFrame?{" "}
-          <Link href={registerHref(callbackUrl)} className="font-bold text-emerald-300 hover:text-emerald-200">
+          <Link href={registerHref(callbackUrl)} className="font-bold text-[var(--accent)] hover:text-[var(--accent-hover)]">
             Create an account
           </Link>
         </>

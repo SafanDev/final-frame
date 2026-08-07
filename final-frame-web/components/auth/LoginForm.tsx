@@ -202,13 +202,6 @@ export default function LoginForm({
         Sign in securely
       </Button>
 
-      {emailDeliveryAvailable !== false ? (
-        <p className="text-center text-sm leading-6 text-zinc-500">
-          <Link href="/forgot-password" className="font-bold text-zinc-300 underline decoration-white/20 underline-offset-4 hover:text-white">Forgot your password?</Link>
-        </p>
-      ) : (
-        <p className="text-center text-xs leading-5 text-zinc-500">Password changes are available after sign-in.</p>
-      )}
     </form>
   );
 }

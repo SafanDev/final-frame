@@ -6,7 +6,7 @@ import { loginHref, safeRelativeCallback } from "@/lib/auth/redirects";
 
 export const metadata: Metadata = {
   title: "Create account",
-  description: "Create a FinalFrame Client account for secure review and approval.",
+  description: "Create a FinalFrame account.",
   alternates: { canonical: "/register" },
   robots: { index: false, follow: false },
 };
@@ -26,12 +26,12 @@ export default async function RegisterPage({
 
   return (
     <AuthShell
+      variant="register"
       title="Create account"
-      description="Join reviews, share feedback and keep decisions clear."
       footer={
         <>
           Already have an account?{" "}
-          <Link href={loginHref(callbackUrl)} className="font-bold text-emerald-300 hover:text-emerald-200">
+          <Link href={loginHref(callbackUrl)} className="font-bold text-[var(--accent)] hover:text-[var(--accent-hover)]">
             Sign in
           </Link>
         </>

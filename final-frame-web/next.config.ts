@@ -43,9 +43,6 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
     dangerouslyAllowSVG: false,
   },
-  experimental: {
-    optimizePackageImports: ["framer-motion"],
-  },
   async headers() {
     return [
       {

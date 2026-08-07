@@ -10,5 +10,14 @@ export default async function VerifyEmailPage({ searchParams }: { searchParams: 
   const sent = (Array.isArray(params.sent) ? params.sent[0] : params.sent) === "1";
   const rawEmail = Array.isArray(params.email) ? params.email[0] : params.email;
   const email = typeof rawEmail === "string" && rawEmail.length <= 254 ? rawEmail : "";
-  return <AuthShell title="Verify your email" description="Verification protects project invitations and account recovery." footer={<Link href="/login" className="font-bold text-emerald-300">Return to sign in</Link>}><VerifyEmailClient sent={sent} email={email} /></AuthShell>;
+  return (
+    <AuthShell
+      variant="simple"
+      title="Verify email"
+      description="Check your email to continue."
+      footer={<Link href="/login" className="font-bold text-[var(--accent)] hover:text-[var(--accent-hover)]">Return to sign in</Link>}
+    >
+      <VerifyEmailClient sent={sent} email={email} />
+    </AuthShell>
+  );
 }

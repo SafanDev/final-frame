@@ -23,16 +23,16 @@
   --text-disabled: #6f7682;
 
   /* Semantic accents */
-  --accent: #79ddb5;
-  --accent-hover: #8be6c1;
-  --accent-strong: #54c99a;
-  --accent-soft: rgb(121 221 181 / 12%);
-  --accent-ink: #062a20;
+  --accent: #4fd1a1;
+  --accent-hover: #67deb2;
+  --accent-strong: #22b984;
+  --accent-soft: rgb(79 209 161 / 12%);
+  --accent-ink: #071b14;
   --info: #80c8ee;
   --warning: #f3c66d;
   --danger: #ef9aa4;
-  --focus: #a5efd2;
-  --focus-ring: rgb(165 239 210 / 16%);
+  --focus: #67ffc4;
+  --focus-ring: rgb(103 255 196 / 18%);
 
   /* Shape and depth */
   --radius-sm: 0.5rem;
