@@ -1,0 +1,33 @@
+{
+  "description": "FinalFrame production budgets. Global ceilings include lazy chunks; route ceilings measure compressed initial assets from Next manifests.",
+  "global": {
+    "javascript": {
+      "maxBytes": 4194304,
+      "maxGzipBytes": 1310720,
+      "maxLargestBytes": 655360,
+      "maxLargestGzipBytes": 225280,
+      "maxFiles": 120
+    },
+    "css": {
+      "maxBytes": 2097152,
+      "maxGzipBytes": 327680,
+      "maxLargestBytes": 393216,
+      "maxLargestGzipBytes": 98304,
+      "maxFiles": 24
+    }
+  },
+  "routes": [
+    {
+      "name": "public landing",
+      "manifestKeys": ["/page"],
+      "javascript": { "maxBytes": 1572864, "maxGzipBytes": 327680 },
+      "css": { "maxBytes": 524288, "maxGzipBytes": 102400 }
+    },
+    {
+      "name": "review workspace",
+      "manifestKeys": ["/project/[id]/page"],
+      "javascript": { "maxBytes": 3145728, "maxGzipBytes": 921600 },
+      "css": { "maxBytes": 786432, "maxGzipBytes": 184320 }
+    }
+  ]
+}

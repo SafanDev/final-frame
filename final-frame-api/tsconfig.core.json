@@ -1,0 +1,34 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "sourceMap": false,
+    "inlineSources": false,
+    "types": []
+  },
+  "include": [
+    "src/types/core-node.d.ts",
+    "src/errors/app-error.ts",
+    "src/errors/unsafe-file-error.ts",
+    "src/services/asset-storage-footprint.ts",
+    "src/services/asset-storage-footprint.test.ts",
+    "src/services/document-integrity-core.ts",
+    "src/services/document-integrity-core.test.ts",
+    "src/services/media-safety.ts",
+    "src/services/media-safety.test.ts",
+    "src/services/metrics-route.ts",
+    "src/services/metrics.ts",
+    "src/services/metrics.test.ts",
+    "src/services/project-workflow.ts",
+    "src/services/project-workflow.test.ts",
+    "src/services/project-access-policy.ts",
+    "src/services/project-access-policy.test.ts",
+    "src/services/quota-policy-core.ts",
+    "src/services/quota-policy-core.test.ts",
+    "src/services/registration-privacy.ts",
+    "src/services/registration-privacy.test.ts",
+    "src/services/outbox-cancellation-policy.ts",
+    "src/services/outbox-cancellation-policy.test.ts"
+  ],
+  "exclude": []
+}

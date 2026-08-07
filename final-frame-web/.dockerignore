@@ -1,0 +1,17 @@
+.git
+.github
+.next
+node_modules
+coverage
+lighthouse-reports
+playwright-report
+test-results
+*.log
+.env
+.env.*
+!.env.example
+!.env.production.example
+Dockerfile*
+docker-compose*.yml
+README-FRONTEND-PART-*.md
+PART-*-VALIDATION.md

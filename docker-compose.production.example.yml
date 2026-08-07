@@ -1,0 +1,208 @@
+name: finalframe
+
+x-api-common: &api-common
+  build:
+    context: ./final-frame-api
+    dockerfile: Dockerfile
+    target: runtime
+  image: ${FINALFRAME_API_IMAGE:?set FINALFRAME_API_IMAGE}
+  restart: unless-stopped
+  init: true
+  depends_on:
+    redis:
+      condition: service_healthy
+    clamav:
+      condition: service_healthy
+  env_file: ./final-frame-api/.env.production
+  environment: &api-environment
+    NODE_ENV: production
+    HOST: 0.0.0.0
+    PORT: "5000"
+    FRONTEND_URL: ${PUBLIC_SITE_URL:?set PUBLIC_SITE_URL}
+    REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+    REDIS_REQUIRED: "true"
+    CLAMAV_HOST: clamav
+    CLAMAV_PORT: "3310"
+    SESSION_COOKIE_NAME: __Secure-next-auth.session-token
+    NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET}
+  expose: ["5000"]
+  networks: [private, egress]
+  read_only: true
+  tmpfs:
+    - /tmp:size=512m,noexec,nosuid,nodev
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  healthcheck:
+    test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:5000/health/ready"]
+    interval: 30s
+    timeout: 5s
+    retries: 5
+    start_period: 45s
+
+services:
+  edge:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      finalframe-web:
+        condition: service_healthy
+      finalframe-api-1:
+        condition: service_healthy
+      finalframe-api-2:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+      LB_COOKIE_SECRET: ${LB_COOKIE_SECRET:?set LB_COOKIE_SECRET}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge, private]
+    expose: ["8080"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+
+  finalframe-web:
+    build:
+      context: ./final-frame-web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:?set PUBLIC_SITE_URL}
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?set PUBLIC_API_URL}
+        NEXT_PUBLIC_STORAGE_ORIGIN: ${PUBLIC_STORAGE_ORIGIN:?set PUBLIC_STORAGE_ORIGIN}
+        HSTS_SCOPE: ${HSTS_SCOPE:-host}
+        HSTS_MAX_AGE_SECONDS: ${HSTS_MAX_AGE_SECONDS:-15552000}
+        HSTS_DOMAIN_CONTROL_CONFIRMED: ${HSTS_DOMAIN_CONTROL_CONFIRMED:-false}
+        INTERNAL_API_URL: http://edge:8080/backend
+        RELEASE_VERSION: ${RELEASE_VERSION:?set RELEASE_VERSION}
+    image: ${FINALFRAME_WEB_IMAGE:?set FINALFRAME_WEB_IMAGE}
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      DEPLOYMENT_ENVIRONMENT: production
+      NEXT_PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:?set PUBLIC_SITE_URL}
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?set PUBLIC_API_URL}
+      NEXT_PUBLIC_STORAGE_ORIGIN: ${PUBLIC_STORAGE_ORIGIN:?set PUBLIC_STORAGE_ORIGIN}
+      HSTS_SCOPE: ${HSTS_SCOPE:-host}
+      HSTS_MAX_AGE_SECONDS: ${HSTS_MAX_AGE_SECONDS:-15552000}
+      HSTS_DOMAIN_CONTROL_CONFIRMED: ${HSTS_DOMAIN_CONTROL_CONFIRMED:-false}
+      NEXT_PUBLIC_SITE_NAME: FinalFrame
+      NEXT_PUBLIC_RELEASE_VERSION: ${RELEASE_VERSION:?set RELEASE_VERSION}
+      RELEASE_VERSION: ${RELEASE_VERSION:?set RELEASE_VERSION}
+      NEXT_PUBLIC_TELEMETRY_ENABLED: "true"
+      NEXT_PUBLIC_TELEMETRY_SAMPLE_RATE: "0.1"
+      API_URL: http://edge:8080/backend
+      NEXTAUTH_URL: ${PUBLIC_SITE_URL:?set PUBLIC_SITE_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET}
+      SESSION_COOKIE_NAME: __Secure-next-auth.session-token
+      OBSERVABILITY_ENDPOINT: ""
+      OBSERVABILITY_TOKEN: ""
+      OBSERVABILITY_LOG_TO_STDOUT: "true"
+      TELEMETRY_MAX_BODY_BYTES: "16384"
+    expose: ["3000"]
+    networks: [private, egress]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+      - /app/.next/cache:size=128m,nosuid,nodev
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+  finalframe-api-1:
+    <<: *api-common
+
+  finalframe-api-2:
+    <<: *api-common
+
+  migrate:
+    build:
+      context: ./final-frame-api
+      dockerfile: Dockerfile
+      target: migration
+    profiles: ["operations"]
+    env_file: ./final-frame-api/.env.production
+    environment:
+      NODE_ENV: production
+      BACKUP_RESTORE_TESTED: ${BACKUP_RESTORE_TESTED:-false}
+      BACKUP_RESTORE_VERIFIED_AT: ${BACKUP_RESTORE_VERIFIED_AT:-}
+      BACKUP_MAX_AGE_HOURS: ${BACKUP_MAX_AGE_HOURS:-24}
+      MIGRATION_CONFIRM_DATABASE: ${MIGRATION_CONFIRM_DATABASE:-}
+    networks: [private, egress]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  storage-reconcile:
+    <<: *api-common
+    profiles: ["operations"]
+    restart: "no"
+    command:
+      - node
+      - --enable-source-maps
+      - dist/scripts/reconcile-storage.js
+    healthcheck:
+      disable: true
+    # Dry-run by default. To apply after reviewing the report, append:
+    # --apply --confirm-bucket=<the exact R2 bucket name>
+
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis_data:/data
+    networks: [private]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+
+  clamav:
+    image: clamav/clamav:1.4.3
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    networks: [private]
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+networks:
+  edge: {}
+  private:
+    internal: true
+  egress: {}
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+
+  redis_data: {}
+  clamav_data: {}

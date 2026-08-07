@@ -1,0 +1,40 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /final-frame-api
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
+    groups:
+      api-runtime:
+        dependency-type: production
+      api-development:
+        dependency-type: development
+
+  - package-ecosystem: npm
+    directory: /final-frame-web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
+    groups:
+      web-runtime:
+        dependency-type: production
+      web-development:
+        dependency-type: development
+
+  - package-ecosystem: docker
+    directory: /final-frame-api
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /final-frame-web
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
