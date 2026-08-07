@@ -119,6 +119,7 @@ jobs:
             -p 9000:9000 \
             -e MINIO_ROOT_USER="$R2_ACCESS_KEY_ID" \
             -e MINIO_ROOT_PASSWORD="$R2_SECRET_ACCESS_KEY" \
+            -e MINIO_API_CORS_ALLOW_ORIGIN="$FRONTEND_URL" \
             minio/minio:RELEASE.2025-05-24T17-08-30Z server /data
           docker run --rm -d --name finalframe-ci-clamav \
             -p 3310:3310 \
@@ -152,6 +153,7 @@ jobs:
         env:
           NODE_ENV: test
           E2E_STORAGE_PREPARE_CONFIRM: "true"
+          E2E_STORAGE_USE_SERVER_CORS: "true"
         run: npm run e2e:storage:prepare
 
       - name: Rehearse clean and upgraded database migrations
