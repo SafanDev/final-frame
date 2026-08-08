@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
+import { getCurrentSession } from "@/lib/auth/session";
 import { Toaster } from "sonner";
 import AuthProvider from "@/components/AuthProvider";
 import Navbar from "@/components/Navbar";
@@ -68,12 +69,13 @@ export default async function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   // A request-specific CSP nonce requires runtime rendering.
   await connection();
+  const session = await getCurrentSession();
 
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>
         <WebVitalsReporter />
-        <AuthProvider>
+        <AuthProvider session={session}>
           <a className="skip-link" href="#main-content">
             Skip to main content
           </a>
