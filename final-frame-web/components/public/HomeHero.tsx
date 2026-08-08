@@ -43,9 +43,19 @@ export default function HomeHero() {
       <div className="ff-home-demo-wrap">
         <div className="ff-home-demo-note" aria-hidden="true">
           <span>Live review</span>
-          <span>Try the controls</span>
+          <span>Review preview</span>
         </div>
-        <ReviewPreview />
+        <div className="ff-home-demo-mobile" aria-label="FinalFrame review preview">
+          <div>
+            <span className="ff-live-dot" aria-hidden="true" />
+            <strong>Campaign launch</strong>
+          </div>
+          <span className="ff-status-chip">In review</span>
+          <p>Versioned work, pinned feedback, and a clear client decision.</p>
+        </div>
+        <div className="ff-home-demo-full">
+          <ReviewPreview />
+        </div>
       </div>
     </section>
   );

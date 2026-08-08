@@ -15,6 +15,7 @@ import {
   renewDistributedLease,
 } from '../services/distributed-guards.js';
 import { metrics } from '../services/metrics.js';
+import { canPublishWorkspaceEvent } from '../services/realtime-authorization.js';
 import type { RealtimeController } from './types.js';
 import { logger } from '../utils/logger.js';
 
@@ -301,11 +302,13 @@ export const createSocketRuntime = async (httpServer: HttpServer): Promise<Socke
 
         if (!socket.connected || sequence !== joinSequence) return;
         if (!project) {
+          // Reject the workspace join without closing the authenticated socket.
+          // Keeping the connection alive makes the denial observable by the client
+          // while still ensuring the socket never enters the unauthorized room.
           socket.emit('workspace-error', {
             code: 'PROJECT_ACCESS_DENIED',
             message: 'Project access is no longer available.',
           });
-          socket.disconnect(true);
           return;
         }
 
@@ -358,7 +361,7 @@ export const createSocketRuntime = async (httpServer: HttpServer): Promise<Socke
       if (socket.data.lastCursorAt && now - socket.data.lastCursorAt < env.SOCKET_CURSOR_INTERVAL_MS) return;
 
       const parsed = cursorSchema.safeParse(rawPayload);
-      if (!parsed.success || socket.data.projectId !== parsed.data.projectId) return;
+      if (!parsed.success || !canPublishWorkspaceEvent(socket.data.projectId, parsed.data.projectId)) return;
 
       socket.data.lastCursorAt = now;
       socket.to(parsed.data.projectId).volatile.emit('cursor-update', {

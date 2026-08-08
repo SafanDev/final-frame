@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { io } from "socket.io-client";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -9,6 +10,79 @@ const clientPassword = process.env.E2E_CLIENT_PASSWORD;
 const allowMutations = process.env.E2E_ALLOW_MUTATIONS === "true";
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:3100/backend";
 const requireCredentials = Boolean(process.env.CI);
+const browserBaseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3100";
+const sessionCookieName = process.env.SESSION_COOKIE_NAME || "next-auth.session-token";
+
+function invitationToken(inviteUrl: string): string {
+  const hash = new URL(inviteUrl).hash.replace(/^#/, "");
+  const token = new URLSearchParams(hash).get("token");
+  if (!token) throw new Error("Invitation URL did not contain a token fragment.");
+  return token;
+}
+
+async function assertSessionCookieSecurity(context: BrowserContext): Promise<void> {
+  const cookies = await context.cookies();
+  const sessionCookies = cookies.filter(
+    (cookie) => cookie.name === sessionCookieName || cookie.name.startsWith(`${sessionCookieName}.`),
+  );
+  expect(sessionCookies.length).toBeGreaterThan(0);
+  const https = new URL(browserBaseUrl).protocol === "https:";
+  for (const cookie of sessionCookies) {
+    expect(cookie.httpOnly).toBe(true);
+    expect(cookie.sameSite).toBe("Lax");
+    expect(cookie.path).toBe("/");
+    expect(cookie.domain.startsWith(".")).toBe(false);
+    if (https) expect(cookie.secure).toBe(true);
+  }
+}
+
+async function expectCrossTenantSocketDenied(context: BrowserContext, projectId: string): Promise<void> {
+  const publicOrigin = new URL(browserBaseUrl).origin;
+  const api = new URL(apiUrl);
+  const basePath = api.pathname.replace(/\/$/, "");
+  const cookies = await context.cookies(publicOrigin);
+  const cookieHeader = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
+  expect(cookieHeader).not.toBe("");
+
+  await new Promise<void>((resolvePromise, rejectPromise) => {
+    let settled = false;
+    const socket = io(api.origin, {
+      path: `${basePath}/socket.io`.replace(/\/{2,}/g, "/"),
+      transports: ["websocket"],
+      reconnection: false,
+      timeout: 10_000,
+      extraHeaders: { Cookie: cookieHeader, Origin: publicOrigin },
+    });
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      socket.disconnect();
+      rejectPromise(new Error("Cross-tenant Socket.IO join was not rejected in time."));
+    }, 15_000);
+
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.disconnect();
+      if (error) rejectPromise(error);
+      else resolvePromise();
+    };
+
+    socket.on("connect", () => socket.emit("join-workspace", { projectId }));
+    socket.on("workspace-error", (payload: unknown) => {
+      const code = payload && typeof payload === "object"
+        ? String((payload as { code?: unknown }).code ?? "")
+        : "";
+      if (code !== "PROJECT_ACCESS_DENIED") {
+        finish(new Error(`Expected PROJECT_ACCESS_DENIED, received ${code || "no error code"}.`));
+        return;
+      }
+      finish();
+    });
+    socket.on("connect_error", (error) => finish(error));
+  });
+}
 
 
 const reviewPng = readFileSync(
@@ -91,6 +165,7 @@ test.describe("authenticated integration", () => {
   });
 
   test("opens account security with a revocable database-backed session", async ({ page }) => {
+    await assertSessionCookieSecurity(page.context());
     await page.goto("/account");
     await expect(page.getByRole("heading", { name: /^account$/i })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Download your data", exact: true })).toBeVisible();
@@ -224,6 +299,11 @@ test.describe("authenticated integration", () => {
 
       const clientPage = await clientContext.newPage();
       await login(clientPage, clientEmail || "", clientPassword || "");
+
+      const crossTenantWorkspace = await clientPage.request.get(`${apiUrl}/api/projects/workspace/${project.id}`);
+      expect(crossTenantWorkspace.status()).toBe(404);
+      if (browserName === "chromium") await expectCrossTenantSocketDenied(clientContext, project.id);
+
       await clientPage.goto(invitation.inviteUrl);
       await expect(clientPage).toHaveURL(new RegExp(`/project/${project.id}$`));
 
@@ -323,7 +403,7 @@ test.describe("authenticated integration", () => {
     }
   });
 
-  test("accepts a one-time Client invitation and updates members without a refresh", async ({ page, browser }) => {
+  test("rejects forwarded access, accepts a one-time Client invitation, and updates members without a refresh", async ({ page, browser, browserName }) => {
     test.skip(!allowMutations, "Invitation integration requires a disposable database.");
     test.skip(!clientEmail || !clientPassword, "Set E2E_CLIENT_EMAIL and E2E_CLIENT_PASSWORD.");
     test.setTimeout(240_000);
@@ -346,14 +426,34 @@ test.describe("authenticated integration", () => {
     });
     expect(invited.ok()).toBeTruthy();
     const invitation = await invited.json() as { inviteUrl: string; projectVersion: number };
+    const token = invitationToken(invitation.inviteUrl);
+
+    const wrongAccountPreview = await page.request.post(`${apiUrl}/api/projects/invitations/preview`, {
+      data: { token },
+    });
+    expect(wrongAccountPreview.status()).toBe(403);
+    const wrongAccountAccept = await page.request.post(`${apiUrl}/api/projects/invitations/accept`, {
+      data: { token },
+    });
+    expect(wrongAccountAccept.status()).toBe(403);
 
     const clientContext = await browser.newContext();
     try {
       const clientPage = await clientContext.newPage();
       await login(clientPage, clientEmail || "", clientPassword || "");
+
+      const crossTenantWorkspace = await clientPage.request.get(`${apiUrl}/api/projects/workspace/${project.id}`);
+      expect(crossTenantWorkspace.status()).toBe(404);
+      if (browserName === "chromium") await expectCrossTenantSocketDenied(clientContext, project.id);
+
       await clientPage.goto(invitation.inviteUrl);
       await expect(clientPage).toHaveURL(new RegExp(`/project/${project.id}$`));
       await expect(clientPage.getByRole("heading", { name: title })).toBeVisible();
+
+      const invitationReplay = await clientPage.request.post(`${apiUrl}/api/projects/invitations/accept`, {
+        data: { token },
+      });
+      expect(invitationReplay.status()).toBe(410);
 
       await page.getByRole("button", { name: /^review$/i }).click();
       const memberControl = page.getByRole("button", { name: /members · 1/i });

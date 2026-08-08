@@ -4,6 +4,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import WebVitalsReporter from "@/components/observability/WebVitalsReporter";
+import { GuestSiteFooter, GuestSiteHeader } from "@/components/navigation/GuestSiteChrome";
 import { clientEnv } from "@/lib/env/client";
 import "./globals.css";
 
@@ -72,15 +73,19 @@ export default async function RootLayout({
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>
-        <WebVitalsReporter />
-          <a className="skip-link" href="#main-content">
-            Skip to main content
-          </a>
-          <Navbar currentUser={session?.user ? { name: session.user.name } : null} />
-          <main id="main-content" tabIndex={-1} className="relative z-10 flex min-h-0 flex-1 flex-col">
-            {children}
-          </main>
-          <Footer />
+        {clientEnv.NEXT_PUBLIC_TELEMETRY_ENABLED ? <WebVitalsReporter /> : null}
+        <a className="skip-link" href="#main-content">
+          Skip to main content
+        </a>
+        {session?.user ? (
+          <Navbar currentUser={{ name: session.user.name }} />
+        ) : (
+          <GuestSiteHeader />
+        )}
+        <main id="main-content" tabIndex={-1} className="relative z-10 flex min-h-0 flex-1 flex-col">
+          {children}
+        </main>
+        {session?.user ? <Footer /> : <GuestSiteFooter />}
       </body>
     </html>
   );

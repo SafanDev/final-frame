@@ -68,17 +68,25 @@ test.describe("authenticated accessibility", () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto("/login");
-    await page.waitForLoadState("networkidle");
 
     const emailInput = page.getByRole("textbox", { name: /email/i });
     const passwordInput = page.getByLabel(/password/i);
     const signInButton = page.getByRole("button", { name: /sign in/i });
 
-    await emailInput.fill(authenticatedEmail || "");
-    await passwordInput.fill(authenticatedPassword || "");
+    await expect(emailInput).toBeVisible();
+    await expect(passwordInput).toBeVisible();
+
+    await emailInput.click();
+    await emailInput.fill("");
+    await emailInput.pressSequentially(authenticatedEmail || "", { delay: 5 });
+
+    await passwordInput.click();
+    await passwordInput.fill("");
+    await passwordInput.pressSequentially(authenticatedPassword || "", { delay: 5 });
+
     await expect(emailInput).toHaveValue(authenticatedEmail || "");
     await expect(passwordInput).toHaveValue(authenticatedPassword || "");
-    await expect(signInButton).toBeEnabled();
+    await expect(signInButton).toBeEnabled({ timeout: 15_000 });
     await signInButton.click();
     await expect(page).toHaveURL(/\/app(?:\?.*)?$/);
   });

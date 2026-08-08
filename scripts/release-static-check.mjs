@@ -716,6 +716,51 @@ assert(
   'Private metrics expose durable cleanup queue state and the repository documents application and operator-owned retention policy.',
 );
 assert(
+  text('final-frame-web/tests/e2e/authenticated.spec.ts').includes('wrongAccountPreview.status()).toBe(403)')
+    && text('final-frame-web/tests/e2e/authenticated.spec.ts').includes('invitationReplay.status()).toBe(410)')
+    && text('final-frame-web/tests/e2e/authenticated.spec.ts').includes('crossTenantWorkspace.status()).toBe(404)')
+    && text('final-frame-web/tests/e2e/authenticated.spec.ts').includes('PROJECT_ACCESS_DENIED')
+    && text('final-frame-web/tests/e2e/authenticated.spec.ts').includes('assertSessionCookieSecurity')
+    && text('final-frame-api/src/realtime/socket-server.ts').includes('canPublishWorkspaceEvent(socket.data.projectId, parsed.data.projectId)')
+    && text('final-frame-api/src/services/realtime-authorization.test.ts').includes('project-a')
+    && text('final-frame-api/src/services/realtime-authorization.test.ts').includes('project-b'),
+  'Authenticated coverage proves forwarded-invite rejection, one-time consumption, cross-tenant API/Socket.IO join denial, cursor event scoping, and hardened session cookies.',
+);
+assert(
+  apiManifest.scripts?.['ops:dead-letter'] === 'node --enable-source-maps dist/scripts/dead-letter.js'
+    && text('final-frame-api/src/scripts/dead-letter.ts').includes("status: EmailDeliveryStatus.ABANDONED")
+    && text('final-frame-api/src/scripts/dead-letter.ts').includes('confirmation !== id')
+    && text('deploy/monitoring/finalframe-alerts.yml').includes('FinalFrameEmailDeadLetters')
+    && text('deploy/monitoring/finalframe-alerts.yml').includes('FinalFrameStorageDeadLetters')
+    && text('final-frame-web/docs/OPERATIONS-RUNBOOK.md').includes('ops:dead-letter'),
+  'Email and storage dead letters are visible, alerted, and replayable only through exact-ID operator confirmation.',
+);
+assert(
+  apiManifest.scripts?.['ops:restore-drill'] === 'node scripts/restore-drill.mjs'
+    && text('final-frame-api/scripts/restore-drill.mjs').includes('RESTORE_DRILL_CONFIRM=true')
+    && text('final-frame-api/scripts/restore-drill-lib.mjs').includes('Restore drill target must not be the source database.')
+    && text('final-frame-api/scripts/restore-drill.test.mjs').includes('refuses the production/source database')
+    && text('docs/RELEASE_VALIDATION.md').includes('Backup restore drill'),
+  'Backup readiness requires an executable restore drill against a separately confirmed disposable PostgreSQL database.',
+);
+assert(
+  apiManifest.scripts?.['ops:load-slo'] === 'node scripts/load-slo.mjs'
+    && text('final-frame-api/scripts/load-slo.mjs').includes('LOAD_TEST_P95_MS')
+    && text('final-frame-api/scripts/load-slo.mjs').includes('LOAD_TEST_MAX_ERROR_RATE')
+    && text('final-frame-api/scripts/load-slo.test.mjs').includes('remote targets require TLS')
+    && text('scripts/run-release-gates.mjs').includes("['run', 'ops:load-slo']"),
+  'The full staging gate includes a bounded, GET-only load probe with explicit p95 and error-rate SLOs.',
+);
+assert(
+  apiManifest.scripts?.['ops:verify-deployed-security'] === 'node scripts/verify-deployed-security.mjs'
+    && text('final-frame-api/scripts/verify-deployed-security.mjs').includes('cross-site-attacker.invalid')
+    && text('final-frame-api/scripts/deployed-security-lib.mjs').includes('strict-transport-security')
+    && text('scripts/run-release-gates.mjs').includes("['run', 'ops:verify-deployed-security']")
+    && text('docs/RELEASE_VALIDATION.md').includes('Production-like staging checks'),
+  'The full staging gate verifies deployed HTTPS headers, CSP/HSTS, private caching, CORS, and cross-site mutation rejection.',
+);
+
+assert(
   text('final-frame-web/Dockerfile').includes('ARG HSTS_SCOPE=host')
     && text('final-frame-web/Dockerfile').includes('HSTS_DOMAIN_CONTROL_CONFIRMED=$HSTS_DOMAIN_CONTROL_CONFIRMED')
     && text('docker-compose.production.example.yml').includes('HSTS_SCOPE: ${HSTS_SCOPE:-host}')

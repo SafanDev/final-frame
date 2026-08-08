@@ -46,7 +46,9 @@ EMAIL_FROM_ADDRESS=FinalFrame <mail@example.com>
 4. Start matching API and web images.
 5. Check health and readiness routes.
 6. Test sign-in, upload, preview, feedback, approval and download.
-7. Watch errors, queue health and storage cleanup.
+7. Run deployed security verification, cross-tenant/invitation E2E, and the staging SLO probe.
+8. Confirm email/storage dead-letter queues are empty or individually reviewed.
+9. Watch errors, queue health and storage cleanup.
 
 ## HSTS scope governance
 
@@ -55,3 +57,7 @@ The default HSTS setting protects only the app host. Do not enable subdomain sco
 ## Rollback
 
 Roll back the web and API as one matching release. Do not reverse a database migration unless a tested reverse plan exists.
+
+## Final release evidence
+
+Before switching public traffic, retain evidence for the real backup restore drill, the green CI run, staging browser/accessibility results, deployed security check, load/SLO result, and dead-letter inspection. `BACKUP_RESTORE_TESTED=true` is valid only after the restore drill actually completed against a disposable database.
