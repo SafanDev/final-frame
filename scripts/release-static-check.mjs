@@ -643,7 +643,11 @@ assert(
 );
 
 assert(
-  text('final-frame-web/components/AuthProvider.tsx').includes('UserPreferencesProvider')
+  text('final-frame-web/components/ProductProviders.tsx').includes('UserPreferencesProvider')
+    && text('final-frame-web/app/app/layout.tsx').includes('<ProductProviders>{children}</ProductProviders>')
+    && text('final-frame-web/app/account/layout.tsx').includes('<ProductProviders>{children}</ProductProviders>')
+    && text('final-frame-web/app/notifications/layout.tsx').includes('<ProductProviders>{children}</ProductProviders>')
+    && text('final-frame-web/app/project/[id]/layout.tsx').includes('<ProductProviders>{children}</ProductProviders>')
     && text('final-frame-web/components/account/AccountPreferences.tsx').includes('publishUserFormattingPreferences')
     && text('final-frame-web/contexts/UserPreferencesContext.tsx').includes('profile.timeZone')
     && text('final-frame-web/components/feedback/ActivityTimeline.tsx').includes('formatDateTime(entry.createdAt, preferences)')
