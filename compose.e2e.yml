@@ -1,0 +1,62 @@
+name: finalframe-e2e
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: "no"
+    environment:
+      POSTGRES_DB: finalframe_e2e
+      POSTGRES_USER: finalframe_e2e
+      POSTGRES_PASSWORD: ${E2E_POSTGRES_PASSWORD:?E2E_POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - finalframe-e2e-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U finalframe_e2e -d finalframe_e2e
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: "no"
+    environment:
+      REDIS_PASSWORD: ${E2E_REDIS_PASSWORD:?E2E_REDIS_PASSWORD is required}
+    command:
+      - sh
+      - -c
+      - exec redis-server --save "" --appendonly no --requirepass "$$REDIS_PASSWORD"
+    ports:
+      - "127.0.0.1:56379:6379"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: "no"
+    environment:
+      MINIO_ROOT_USER: ${E2E_MINIO_ROOT_USER:?E2E_MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${E2E_MINIO_ROOT_PASSWORD:?E2E_MINIO_ROOT_PASSWORD is required}
+      MINIO_API_CORS_ALLOW_ORIGIN: http://127.0.0.1:3100
+    command:
+      - server
+      - /data
+      - --console-address
+      - :9001
+    ports:
+      - "127.0.0.1:59000:9000"
+      - "127.0.0.1:59001:9001"
+    volumes:
+      - finalframe-e2e-minio:/data
+
+volumes:
+  finalframe-e2e-postgres:
+  finalframe-e2e-minio:

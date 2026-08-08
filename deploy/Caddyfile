@@ -1,0 +1,59 @@
+{
+	admin off
+	email {$ACME_EMAIL}
+}
+
+# Private, plain-HTTP API load balancer used only by server-side web requests on
+# the internal Docker network. It is never published to the host.
+:8080 {
+	@backend path /backend /backend/*
+	handle @backend {
+		uri strip_prefix /backend
+		reverse_proxy finalframe-api-1:5000 finalframe-api-2:5000 {
+			lb_policy cookie finalframe_backend {$LB_COOKIE_SECRET}
+			health_uri /health/ready
+			health_interval 15s
+			health_timeout 3s
+			fail_duration 30s
+			max_fails 2
+		}
+	}
+	handle {
+		respond 404
+	}
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# Metrics are scraped only from the private :8080 listener. Returning 404 at
+	# the public edge avoids exposing even the existence of the endpoint.
+	@publicMetrics path /backend/metrics /backend/metrics/*
+	respond @publicMetrics 404
+
+	@backend path /backend /backend/*
+	handle @backend {
+		uri strip_prefix /backend
+		reverse_proxy finalframe-api-1:5000 finalframe-api-2:5000 {
+			# Socket.IO long-polling must remain on one replica for the lifetime of a
+			# transport session. Redis Streams distributes rooms and events between
+			# replicas; this signed affinity cookie keeps transport requests stable.
+			lb_policy cookie finalframe_backend {$LB_COOKIE_SECRET}
+			health_uri /health/ready
+			health_interval 15s
+			health_timeout 3s
+			fail_duration 30s
+			max_fails 2
+		}
+	}
+
+	handle {
+		reverse_proxy finalframe-web:3000
+	}
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}

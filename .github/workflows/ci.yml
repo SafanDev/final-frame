@@ -1,0 +1,474 @@
+name: FinalFrame full-system CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finalframe-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 24.18.0
+  DATABASE_URL: postgresql://finalframe:finalframe@127.0.0.1:5432/finalframe
+  DIRECT_DATABASE_URL: postgresql://finalframe:finalframe@127.0.0.1:5432/finalframe
+  REDIS_URL: redis://127.0.0.1:6379/0
+  REDIS_REQUIRED: "true"
+  FRONTEND_URL: http://127.0.0.1:3100
+  NEXTAUTH_URL: http://127.0.0.1:3100
+  NEXTAUTH_SECRET: ci-only-shared-secret-with-more-than-thirty-two-characters
+  SESSION_COOKIE_NAME: next-auth.session-token
+  MFA_ENCRYPTION_KEY: ci-only-mfa-encryption-key-with-more-than-thirty-two-characters
+  MFA_RECOVERY_PEPPER: ci-only-mfa-recovery-pepper-with-more-than-thirty-two-characters
+  R2_ACCOUNT_ID: local-ci
+  R2_ACCESS_KEY_ID: finalframe-ci
+  R2_SECRET_ACCESS_KEY: finalframe-ci-secret-key
+  R2_BUCKET_NAME: finalframe-ci-assets
+  R2_ENDPOINT: http://127.0.0.1:9000
+  R2_REGION: us-east-1
+  R2_FORCE_PATH_STYLE: "true"
+  CLAMAV_HOST: 127.0.0.1
+  CLAMAV_PORT: "3310"
+  REQUIRE_EMAIL_VERIFICATION: "false"
+  METRICS_BEARER_TOKEN: ci-only-metrics-token-with-more-than-thirty-two-characters
+  CERTIFICATE_SIGNING_KEY: ci-only-certificate-signing-key-with-more-than-forty-eight-characters
+  CERTIFICATE_KEY_ID: finalframe-ci-ed25519-v1
+  CERTIFICATE_TRUSTED_PUBLIC_KEYS_JSON: "{}"
+  NEXT_PUBLIC_SITE_URL: http://127.0.0.1:3100
+  NEXT_PUBLIC_API_URL: http://127.0.0.1:3100/backend
+  NEXT_PUBLIC_STORAGE_ORIGIN: http://127.0.0.1:9000
+  NEXT_PUBLIC_SITE_NAME: FinalFrame
+  NEXT_PUBLIC_RELEASE_VERSION: ci
+  RELEASE_VERSION: ci
+  API_URL: http://127.0.0.1:5000
+  DEPLOYMENT_ENVIRONMENT: development
+  NEXT_PUBLIC_TELEMETRY_ENABLED: "false"
+  NEXT_PUBLIC_TELEMETRY_SAMPLE_RATE: "0"
+  OBSERVABILITY_LOG_TO_STDOUT: "false"
+  TELEMETRY_MAX_BODY_BYTES: "16384"
+  E2E_EMAIL: designer.e2e@example.test
+  E2E_PASSWORD: FinalFrame-E2E-Password!24
+  E2E_CLIENT_EMAIL: client.e2e@example.test
+  E2E_CLIENT_PASSWORD: FinalFrame-E2E-Client!24
+  E2E_ALLOW_MUTATIONS: "true"
+
+jobs:
+  core-safety:
+    name: Dependency-light security and workflow checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Validate complete repository release contracts
+        run: node scripts/release-static-check.mjs
+      - name: Run dependency-light API regression tests
+        working-directory: final-frame-api
+        run: node --experimental-strip-types --test src/config/*.test.ts src/services/*.test.ts
+      - name: Run dependency-light web security tests
+        working-directory: final-frame-web
+        run: node --experimental-strip-types --test tests/core/*.test.ts
+
+  api-quality:
+    needs: core-safety
+    name: API build, migrations and security tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: finalframe
+          POSTGRES_USER: finalframe
+          POSTGRES_PASSWORD: finalframe
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U finalframe -d finalframe"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: final-frame-api/package-lock.json
+
+      - name: Validate and install API dependencies
+        working-directory: final-frame-api
+        run: |
+          npm run lockfile:check
+          npm ci --no-audit --no-fund
+
+      - name: Rehearse clean and upgraded database migrations
+        working-directory: final-frame-api
+        env:
+          NODE_ENV: test
+          MIGRATION_REHEARSAL_ADMIN_URL: postgresql://finalframe:finalframe@127.0.0.1:5432/postgres
+          MIGRATION_REHEARSAL_BASELINE: 202607220002_upload_and_storage_outbox
+        run: npm run db:migrate:rehearse
+
+      - name: Deploy migrations to the integration database
+        working-directory: final-frame-api
+        env:
+          NODE_ENV: test
+        run: npm run db:migrate:deploy
+
+      - name: Run canonical API verification
+        working-directory: final-frame-api
+        env:
+          NODE_ENV: test
+        run: npm run verify
+
+      - name: Re-run release-script regression tests as an explicit CI gate
+        working-directory: final-frame-api
+        run: npm run test:release-scripts
+
+      - name: Upload validated API build
+        uses: actions/upload-artifact@v7
+        with:
+          name: finalframe-api-build
+          path: final-frame-api/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  web-quality:
+    needs: core-safety
+    name: Web build, coverage and security tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: final-frame-web/package-lock.json
+
+      - name: Validate and install web dependencies
+        working-directory: final-frame-web
+        run: |
+          npm run lockfile:check
+          npm ci --no-audit --no-fund
+
+      - name: Run canonical web verification
+        working-directory: final-frame-web
+        run: npm run verify
+
+      - name: Upload validated web build
+        uses: actions/upload-artifact@v7
+        with:
+          name: finalframe-web-build
+          path: final-frame-web/.next
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload web coverage
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: finalframe-web-coverage
+          path: final-frame-web/coverage
+          if-no-files-found: ignore
+          retention-days: 14
+
+  browser-tests:
+    needs: [api-quality, web-quality]
+    name: Browser and accessibility (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: chromium
+            browser: chromium
+          - project: firefox
+            browser: firefox
+          - project: webkit
+            browser: webkit
+          - project: mobile-chromium
+            browser: chromium
+
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: finalframe
+          POSTGRES_USER: finalframe
+          POSTGRES_PASSWORD: finalframe
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U finalframe -d finalframe"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            final-frame-api/package-lock.json
+            final-frame-web/package-lock.json
+
+      - name: Install asset processing runtime tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg ghostscript poppler-utils
+
+      - name: Start disposable object storage and malware scanner
+        run: |
+          docker run --rm -d --name finalframe-ci-minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER="$R2_ACCESS_KEY_ID" \
+            -e MINIO_ROOT_PASSWORD="$R2_SECRET_ACCESS_KEY" \
+            -e MINIO_API_CORS_ALLOW_ORIGIN="$FRONTEND_URL" \
+            minio/minio:RELEASE.2025-05-24T17-08-30Z server /data
+          docker run --rm -d --name finalframe-ci-clamav \
+            -p 3310:3310 \
+            clamav/clamav:1.4.3
+
+          for attempt in $(seq 1 120); do
+            minio_ready=false
+            clamav_ready=false
+            curl --fail --silent http://127.0.0.1:9000/minio/health/ready >/dev/null && minio_ready=true
+            docker exec finalframe-ci-clamav clamdscan --ping 5 >/dev/null 2>&1 && clamav_ready=true
+            if [ "$minio_ready" = true ] && [ "$clamav_ready" = true ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs finalframe-ci-minio || true
+          docker logs finalframe-ci-clamav || true
+          exit 1
+
+      - name: Install API dependencies
+        working-directory: final-frame-api
+        run: |
+          npm run lockfile:check
+          npm ci --no-audit --no-fund
+
+      - name: Install web dependencies
+        working-directory: final-frame-web
+        run: |
+          npm run lockfile:check
+          npm ci --no-audit --no-fund
+
+      - name: Restore validated API build
+        uses: actions/download-artifact@v8
+        with:
+          name: finalframe-api-build
+          path: final-frame-api/dist
+
+      - name: Restore validated web build
+        uses: actions/download-artifact@v8
+        with:
+          name: finalframe-web-build
+          path: final-frame-web/.next
+
+      - name: Generate Prisma client and migrate isolated database
+        working-directory: final-frame-api
+        env:
+          NODE_ENV: test
+        run: |
+          npm run prisma:validate
+          npm run prisma:generate
+          npm run db:migrate:deploy
+
+      - name: Prepare disposable private object storage
+        working-directory: final-frame-api
+        env:
+          NODE_ENV: test
+          E2E_STORAGE_PREPARE_CONFIRM: "true"
+          E2E_STORAGE_USE_SERVER_CORS: "true"
+        run: npm run e2e:storage:prepare
+
+      - name: Seed disposable E2E Designer
+        working-directory: final-frame-api
+        env:
+          NODE_ENV: test
+          E2E_SEED_CONFIRM: "true"
+        run: npm run e2e:seed
+
+      - name: Start isolated API, web and edge proxy
+        run: |
+          (cd final-frame-api && NODE_ENV=test npm start > /tmp/finalframe-api.log 2>&1 & echo $! > /tmp/finalframe-api.pid)
+          (cd final-frame-web && npm start -- --hostname 127.0.0.1 --port 3101 > /tmp/finalframe-web.log 2>&1 & echo $! > /tmp/finalframe-web.pid)
+          docker run --rm -d --name finalframe-ci-edge --network host \
+            -v "$PWD/deploy/Caddyfile.ci:/etc/caddy/Caddyfile:ro" caddy:2-alpine
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent http://127.0.0.1:3100/backend/health/ready >/dev/null \
+              && curl --fail --silent http://127.0.0.1:3100/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/finalframe-api.log || true
+          cat /tmp/finalframe-web.log || true
+          docker logs finalframe-ci-edge || true
+          exit 1
+
+      - name: Install only the required browser engine
+        working-directory: final-frame-web
+        run: npx playwright install --with-deps "${{ matrix.browser }}"
+
+      - name: Run authenticated browser and accessibility tests
+        working-directory: final-frame-web
+        env:
+          CI: "true"
+          PLAYWRIGHT_EXTERNAL_SERVER: "true"
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
+        run: npm run test:e2e -- --project="${{ matrix.project }}"
+
+      - name: Show service logs on failure
+        if: failure()
+        run: |
+          echo "--- API ---"
+          cat /tmp/finalframe-api.log || true
+          echo "--- WEB ---"
+          cat /tmp/finalframe-web.log || true
+          echo "--- MINIO ---"
+          docker logs finalframe-ci-minio || true
+          echo "--- CLAMAV ---"
+          docker logs finalframe-ci-clamav || true
+
+      - name: Upload browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: finalframe-playwright-${{ matrix.project }}
+          path: |
+            final-frame-web/playwright-report
+            final-frame-web/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Stop isolated services
+        if: always()
+        run: |
+          docker rm -f finalframe-ci-edge 2>/dev/null || true
+          docker rm -f finalframe-ci-minio 2>/dev/null || true
+          docker rm -f finalframe-ci-clamav 2>/dev/null || true
+          test ! -f /tmp/finalframe-web.pid || kill "$(cat /tmp/finalframe-web.pid)" 2>/dev/null || true
+          test ! -f /tmp/finalframe-api.pid || kill "$(cat /tmp/finalframe-api.pid)" 2>/dev/null || true
+
+  lighthouse:
+    needs: web-quality
+    name: Lighthouse (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: desktop
+            command: lighthouse:desktop
+          - mode: mobile
+            command: lighthouse:mobile
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: final-frame-web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: final-frame-web
+        run: |
+          npm run lockfile:check
+          npm ci --no-audit --no-fund
+
+      - name: Restore validated web build
+        uses: actions/download-artifact@v8
+        with:
+          name: finalframe-web-build
+          path: final-frame-web/.next
+
+      - name: Start production web through the CI edge proxy
+        run: |
+          (cd final-frame-web && npm start -- --hostname 127.0.0.1 --port 3101 > /tmp/finalframe-web.log 2>&1 & echo $! > /tmp/finalframe-web.pid)
+          docker run --rm -d --name finalframe-ci-edge --network host \
+            -v "$PWD/deploy/Caddyfile.ci:/etc/caddy/Caddyfile:ro" caddy:2-alpine
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:3100/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/finalframe-web.log || true
+          docker logs finalframe-ci-edge || true
+          exit 1
+
+      - name: Run production-page Lighthouse budget
+        working-directory: final-frame-web
+        env:
+          LIGHTHOUSE_EXTERNAL_SERVER: "true"
+          LIGHTHOUSE_BASE_URL: http://127.0.0.1:3100
+        run: npm run "${{ matrix.command }}"
+
+      - name: Upload Lighthouse diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: finalframe-lighthouse-${{ matrix.mode }}
+          path: final-frame-web/lighthouse-reports
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Stop Lighthouse services
+        if: always()
+        run: |
+          docker rm -f finalframe-ci-edge 2>/dev/null || true
+          test ! -f /tmp/finalframe-web.pid || kill "$(cat /tmp/finalframe-web.pid)" 2>/dev/null || true
+
+  full-system:
+    if: always()
+    needs: [core-safety, api-quality, web-quality, browser-tests, lighthouse]
+    name: Build, test and exercise the complete product
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every release gate
+        env:
+          CORE_SAFETY_RESULT: ${{ needs.core-safety.result }}
+          API_QUALITY_RESULT: ${{ needs.api-quality.result }}
+          WEB_QUALITY_RESULT: ${{ needs.web-quality.result }}
+          BROWSER_TESTS_RESULT: ${{ needs.browser-tests.result }}
+          LIGHTHOUSE_RESULT: ${{ needs.lighthouse.result }}
+        run: |
+          test "$CORE_SAFETY_RESULT" = "success"
+          test "$API_QUALITY_RESULT" = "success"
+          test "$WEB_QUALITY_RESULT" = "success"
+          test "$BROWSER_TESTS_RESULT" = "success"
+          test "$LIGHTHOUSE_RESULT" = "success"

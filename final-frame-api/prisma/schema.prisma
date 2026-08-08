@@ -1,0 +1,494 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AccountStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  DELETED
+}
+
+enum ProjectStatus {
+  DRAFT
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+enum ProjectDeletionStatus {
+  ACTIVE
+  DELETING
+  DELETED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  ABANDONED
+  CANCELLED
+}
+
+enum EmailOutboxType {
+  PROJECT_INVITATION
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  NOTIFICATION
+}
+
+enum ApprovalDecision {
+  SUBMITTED
+  WITHDRAWN
+  CHANGES_REQUESTED
+  APPROVED
+  REOPENED
+}
+
+enum ActivityAction {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  PROJECT_STATUS_CHANGED
+  PROJECT_ARCHIVED
+  PROJECT_REOPENED
+  PROJECT_DELETE_REQUESTED
+  PROJECT_DELETED
+  DOWNLOAD_UNLOCKED
+  DOWNLOAD_REVOKED
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  MEMBER_APPROVER_CHANGED
+  INVITE_CREATED
+  INVITE_SENT
+  INVITE_ACCEPTED
+  INVITE_REVOKED
+  ASSET_UPLOADED
+  ASSET_PROCESSING_FAILED
+  ASSET_RENAMED
+  ASSET_DELETED
+  COMMENT_ADDED
+  COMMENT_EDITED
+  COMMENT_RESOLVED
+  COMMENT_REOPENED
+  COMMENT_DELETED
+  REVIEW_SUBMITTED
+  REVIEW_WITHDRAWN
+  CHANGES_REQUESTED
+  PROJECT_APPROVED
+  PROJECT_AUDIT_EXPORTED
+  AI_ENABLED
+  AI_DISABLED
+  ACCOUNT_EXPORT_REQUESTED
+  ACCOUNT_DELETION_REQUESTED
+}
+
+enum UploadKind {
+  ASSET
+  VOICE_NOTE
+}
+
+enum AssetProcessingStatus {
+  PENDING
+  PROCESSING
+  CLEAN
+  REJECTED
+}
+
+enum CommentAnchorType {
+  GENERAL
+  POINT
+  PDF_POINT
+  CODE_RANGE
+  VIDEO_POINT
+}
+
+enum StorageDeletionStatus {
+  PENDING
+  PROCESSING
+  FAILED
+  ABANDONED
+}
+
+enum AccountTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum NotificationDeliveryMode {
+  IMMEDIATE
+  DAILY_DIGEST
+  IN_APP_ONLY
+}
+
+enum NotificationType {
+  INVITED
+  MEMBER_JOINED
+  COMMENT_ADDED
+  COMMENT_RESOLVED
+  REVIEW_SUBMITTED
+  CHANGES_REQUESTED
+  PROJECT_APPROVED
+  ACCESS_REVOKED
+}
+
+model User {
+  id                        String              @id @default(cuid())
+  name                      String
+  email                     String              @unique
+  passwordHash              String
+  status                    AccountStatus       @default(ACTIVE)
+  storageUsedBytes          BigInt              @default(0)
+  monthlyAiRequests         Int                 @default(0)
+  quotaResetAt              DateTime            @default(now())
+  emailVerifiedAt           DateTime?
+  sessionVersion            Int                 @default(1)
+  passwordChangedAt         DateTime             @default(now())
+  lastLoginAt               DateTime?
+  mfaEnabled                Boolean              @default(false)
+  mfaSecretCiphertext       String?
+  mfaSecretIv               String?
+  mfaSecretTag              String?
+  mfaPendingCiphertext      String?
+  mfaPendingIv              String?
+  mfaPendingTag             String?
+  mfaPendingExpiresAt       DateTime?
+  mfaLastUsedCounter        BigInt?
+  notificationDelivery      NotificationDeliveryMode @default(IMMEDIATE)
+  locale                    String               @default("en-US") @db.VarChar(35)
+  timeZone                  String               @default("UTC") @db.VarChar(100)
+  deletionRequestedAt       DateTime?
+  deletedAt                 DateTime?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  projectsOwned             Project[]            @relation("ProjectOwner")
+  comments                  Comment[]
+  commentRevisions          CommentRevision[]
+  memberOf                  ProjectMember[]
+  activityLogs              ActivityLog[]
+  uploadReservations        UploadReservation[]
+  invitationsCreated        ProjectInvitation[]  @relation("InvitationCreator")
+  invitationsAccepted       ProjectInvitation[]  @relation("InvitationAcceptor")
+  approvalEvents            ApprovalEvent[]       @relation("ApprovalActor")
+  accountTokens             AccountToken[]
+  notifications             Notification[]        @relation("NotificationRecipient")
+  notificationActors        Notification[]        @relation("NotificationActor")
+  emailOutbox               EmailOutbox[]
+  mfaRecoveryCodes          MfaRecoveryCode[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+
+model Project {
+  id                   String                @id @default(cuid())
+  title                String
+  description          String?
+  status               ProjectStatus         @default(DRAFT)
+  version              Int                   @default(1)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  isArchived           Boolean                @default(false)
+  archivedAt           DateTime?
+  isDownloadUnlocked   Boolean                @default(false)
+  aiEnabled            Boolean                @default(false)
+  deletionStatus       ProjectDeletionStatus  @default(ACTIVE)
+  deletionRequestedAt  DateTime?
+  deletedAt            DateTime?
+  ownerId              String
+  finalAssetId         String?
+  owner                User                   @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  finalAsset            Asset?                 @relation("FinalAsset", fields: [finalAssetId], references: [id], onDelete: SetNull)
+  assets               Asset[]                 @relation("ProjectAssets")
+  members              ProjectMember[]
+  invitations          ProjectInvitation[]
+  approvalEvents       ApprovalEvent[]
+  activityLogs         ActivityLog[]
+  uploadReservations   UploadReservation[]
+  notifications        Notification[]
+
+  @@index([ownerId, updatedAt])
+  @@index([status, isArchived, updatedAt])
+  @@index([deletionStatus, deletionRequestedAt])
+}
+
+model ProjectMember {
+  id          String   @id @default(cuid())
+  projectId   String
+  userId      String
+  isApprover  Boolean  @default(false)
+  joinedAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId, joinedAt])
+  @@index([projectId, isApprover])
+}
+
+model ProjectInvitation {
+  id                String               @id @default(cuid())
+  projectId         String
+  invitedEmail      String
+  tokenHash         String               @unique @db.Char(64)
+  status            InvitationStatus     @default(PENDING)
+  canApprove        Boolean              @default(true)
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  acceptedById      String?
+  revokedAt         DateTime?
+  createdById       String
+  deliveryStatus    EmailDeliveryStatus  @default(PENDING)
+  deliveryAttempts  Int                  @default(0)
+  providerMessageId String?
+  lastDeliveryError String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  project           Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy         User                  @relation("InvitationCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  acceptedBy        User?                 @relation("InvitationAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([projectId, status, createdAt])
+  @@index([invitedEmail, status, expiresAt])
+  @@index([deliveryStatus, updatedAt])
+}
+
+model Asset {
+  id                String                @id @default(cuid())
+  storageKey        String
+  previewKey        String?
+  fileName          String
+  normalizedName    String
+  stackKey          String
+  mimeType          String
+  fileSize          Int
+  sha256            String?               @db.Char(64)
+  previewMimeType   String?
+  previewFileSize   Int?
+  width             Int?
+  height            Int?
+  durationSeconds   Float?
+  processingStatus  AssetProcessingStatus @default(PENDING)
+  processingError   String?
+  processingStartedAt DateTime?
+  originalRetiredAt DateTime?
+  version           Int                   @default(1)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  projectId         String
+  project           Project               @relation("ProjectAssets", fields: [projectId], references: [id], onDelete: Cascade)
+  comments          Comment[]
+  finalForProjects  Project[]             @relation("FinalAsset")
+  approvalEvents    ApprovalEvent[]
+
+  @@unique([projectId, stackKey, version])
+  @@index([projectId, createdAt])
+  @@index([projectId, normalizedName])
+  @@index([projectId, processingStatus])
+}
+
+model Comment {
+  id            String            @id @default(cuid())
+  text          String
+  anchorType    CommentAnchorType @default(GENERAL)
+  xPos          Float?
+  yPos          Float?
+  pageNumber    Int?
+  lineStart     Int?
+  lineEnd       Int?
+  columnStart   Int?
+  columnEnd     Int?
+  audioKey      String?           @unique
+  audioMimeType String?
+  audioFileSize Int?
+  timestamp     Float?
+  isBlocking    Boolean           @default(true)
+  isResolved    Boolean           @default(false)
+  isDeleted     Boolean           @default(false)
+  editedAt      DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  assetId       String
+  asset         Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  authorId      String?
+  author        User?             @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  revisions     CommentRevision[]
+
+  @@index([assetId, createdAt])
+  @@index([authorId])
+  @@index([assetId, isResolved, isBlocking, isDeleted])
+}
+
+model CommentRevision {
+  id           String   @id @default(cuid())
+  commentId    String
+  editorId     String?
+  previousText String
+  newText      String
+  createdAt    DateTime @default(now())
+  comment      Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  editor       User?    @relation(fields: [editorId], references: [id], onDelete: SetNull)
+
+  @@index([commentId, createdAt])
+}
+
+model ApprovalEvent {
+  id             String           @id @default(cuid())
+  projectId      String
+  actorId        String?
+  decision       ApprovalDecision
+  projectVersion Int
+  assetId        String?
+  reason         String?
+  snapshot             Json
+  certificateDigest    String?          @db.Char(64)
+  certificateSignature String?
+  certificatePublicKey String?
+  certificateKeyId     String?
+  createdAt            DateTime         @default(now())
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  actor          User?            @relation("ApprovalActor", fields: [actorId], references: [id], onDelete: SetNull)
+  asset          Asset?           @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([projectId, decision, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model ActivityLog {
+  id        String         @id @default(cuid())
+  projectId String
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  userId    String?
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    ActivityAction
+  details   Json
+  createdAt DateTime       @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model UploadReservation {
+  id               String     @id @default(cuid())
+  storageKey       String     @unique
+  projectId        String
+  userId           String
+  kind             UploadKind
+  originalFileName String
+  mimeType         String
+  fileSize         Int
+  multipartUploadId String?   @unique
+  multipartPartSize Int?
+  multipartCompletedAt DateTime?
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  createdAt        DateTime   @default(now())
+  project          Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, userId, kind, expiresAt])
+  @@index([expiresAt, consumedAt])
+  @@index([multipartUploadId, multipartCompletedAt])
+}
+
+model StorageDeletionTask {
+  id            String                @id @default(cuid())
+  objectKey     String                @unique
+  status        StorageDeletionStatus @default(PENDING)
+  attempts      Int                   @default(0)
+  nextAttemptAt DateTime              @default(now())
+  lockedAt      DateTime?
+  lockedBy      String?
+  lastError     String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([status, lockedAt])
+}
+
+model AccountToken {
+  id        String           @id @default(cuid())
+  userId    String
+  type      AccountTokenType
+  tokenHash String           @unique @db.Char(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, expiresAt])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  recipientId String
+  actorId     String?
+  projectId   String?
+  type        NotificationType
+  title       String
+  body        String
+  href        String?
+  readAt      DateTime?
+  emailStatus EmailDeliveryStatus?
+  emailedAt   DateTime?
+  createdAt   DateTime         @default(now())
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  project     Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, readAt, createdAt])
+  @@index([projectId, createdAt])
+}
+
+model EmailOutbox {
+  id            String              @id @default(cuid())
+  type          EmailOutboxType
+  recipient     String
+  subject       String
+  payload       Json
+  status        EmailDeliveryStatus @default(PENDING)
+  attempts      Int                 @default(0)
+  nextAttemptAt DateTime            @default(now())
+  lockedAt      DateTime?
+  lockedBy      String?
+  providerId    String?
+  lastError     String?
+  batchKey      String?             @db.VarChar(191)
+  userId        String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  user          User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextAttemptAt])
+  @@index([recipient, createdAt])
+  @@index([batchKey, status, nextAttemptAt])
+}
+
+model MfaRecoveryCode {
+  id        String   @id @default(cuid())
+  userId    String
+  codeHash  String   @unique @db.Char(64)
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+}
