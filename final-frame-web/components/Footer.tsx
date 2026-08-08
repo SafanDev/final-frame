@@ -25,7 +25,12 @@ export default function Footer() {
         </div>
         <nav aria-label="Trust and support" className="ff-footer-links">
           {trustLinks.map(([label, href]) => (
-            <Link key={href} href={href}>
+            <Link
+              key={href}
+              href={href}
+              aria-current={pathname === href ? "page" : undefined}
+              className={pathname === href ? "is-active" : undefined}
+            >
               {label}
             </Link>
           ))}

@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
+import TrustPageShell from "@/components/public/TrustPageShell";
+import TrustSection from "@/components/public/TrustSection";
 
-export const metadata: Metadata = { title: "Privacy", description: "How FinalFrame handles account, project and diagnostic data." };
+export const metadata: Metadata = {
+  title: "Privacy",
+  description: "How FinalFrame handles account, project and diagnostic data.",
+};
 
 const sections = [
   ["Data FinalFrame stores", "Account identity, project access, project files and derivatives, feedback, approval evidence, security sessions, delivery records, usage counters and limited diagnostic events needed to operate the service."],
@@ -13,5 +18,18 @@ const sections = [
 ] as const;
 
 export default function PrivacyPage() {
-  return <div className="ff-container max-w-4xl py-14 sm:py-20"><p className="ff-eyebrow">Trust center</p><h1 className="mt-2 text-4xl font-black text-white sm:text-5xl">Privacy</h1><p className="mt-5 text-sm leading-7 text-zinc-400">This product notice describes the implemented data flows. Your deployment operator remains responsible for its legal notices, configured processors, retention schedule and contact details.</p><div className="mt-10 divide-y divide-white/10 border-y border-white/10">{sections.map(([title, copy]) => <section key={title} className="py-6"><h2 className="text-xl font-black text-white">{title}</h2><p className="mt-2 text-sm leading-7 text-zinc-400">{copy}</p></section>)}</div></div>;
+  return (
+    <TrustPageShell
+      active="/privacy"
+      eyebrow="Trust center"
+      title="Privacy"
+      description="This product notice describes the implemented data flows. Your deployment operator remains responsible for its legal notices, configured processors, retention schedule and contact details."
+    >
+      {sections.map(([title, copy], index) => (
+        <TrustSection key={title} number={String(index + 1).padStart(2, "0")} title={title}>
+          <p>{copy}</p>
+        </TrustSection>
+      ))}
+    </TrustPageShell>
+  );
 }
