@@ -10,7 +10,10 @@ const warnings = [];
 const passes = [];
 const skipLock = process.argv.includes('--skip-lockfile');
 
-const text = (path) => readFileSync(join(root, path), 'utf8');
+const text = (path) => (
+  readFileSync(join(root, path), 'utf8')
+    .replace(/\r\n?/g, '\n')
+);
 const json = (path) => JSON.parse(text(path));
 const pass = (message) => passes.push(message);
 const fail = (message) => failures.push(message);
@@ -536,7 +539,8 @@ assert(
 assert(
   text('final-frame-web/components/viewers/CodeViewer.tsx').includes('VirtualCodePreview')
     && text('final-frame-web/components/viewers/CodeViewer.tsx').includes('visibleLines')
-    && text('final-frame-web/components/viewers/CodeViewer.tsx').includes('credentials: "include"')
+    && text('final-frame-web/components/viewers/CodeViewer.tsx').includes('credentials = "include"')
+    && text('final-frame-web/components/viewers/CodeViewer.tsx').includes('credentials,')
     && !text('final-frame-web/components/viewers/CodeViewer.tsx').includes('<code>{content}</code>'),
   'Large source previews virtualize visible lines and preserve authenticated same-origin streaming.',
 );
@@ -631,7 +635,9 @@ assert(
 assert(
   text('final-frame-web/components/feedback/CommentDeleteDialog.tsx').includes('onDeleted(target)')
     && text('final-frame-web/components/feedback/CommentDeleteDialog.tsx').includes('onFailed(target')
-    && text('final-frame-web/components/feedback/CommentCard.tsx').includes('onUpdated(optimistic, false)')
+    && text('final-frame-web/components/feedback/CommentCard.tsx').includes('onUpdated(optimistic)')
+    && text('final-frame-web/components/feedback/CommentCard.tsx').includes('onUpdated(updated)')
+    && text('final-frame-web/components/feedback/CommentCard.tsx').includes('onUpdated(previous)')
     && text('final-frame-web/components/feedback/CommentCard.tsx').includes('onResolved(comment.assetId, comment.id, next, false)'),
   'High-frequency feedback edit, resolution, and deletion interactions update immediately and roll back failed mutations.',
 );
@@ -668,11 +674,14 @@ assert(
   'Performance gates cover desktop and throttled mobile Lighthouse plus compressed, route-specific bundle ceilings.',
 );
 assert(
-  text('final-frame-web/lib/security/csp-core.ts').includes("style-src-elem 'self'")
+  text('final-frame-web/lib/security/csp-core.ts').includes('const styleSources = options.production')
+    && text('final-frame-web/lib/security/csp-core.ts').includes('`style-src ${styleSources}`')
+    && text('final-frame-web/lib/security/csp-core.ts').includes('`style-src-elem ${styleSources}`')
     && text('final-frame-web/lib/security/csp-core.ts').includes("style-src-attr 'unsafe-inline'")
-    && !text('final-frame-web/lib/security/csp-core.ts').includes("style-src 'self' 'unsafe-inline'")
     && text('final-frame-web/proxy.ts').includes('createContentSecurityPolicy')
-    && text('final-frame-web/tests/core/csp.test.ts').includes('style elements require a request nonce'),
+    && text('final-frame-web/tests/core/csp.test.ts').includes('style elements require a request nonce')
+    && text('final-frame-web/tests/core/csp.test.ts').includes('development allows framework-injected style elements without weakening production')
+    && text('final-frame-web/tests/core/csp.test.ts').includes("assert.doesNotMatch(policy, /style-src 'self' 'unsafe-inline'/)"),
   'CSP requires nonces for style elements and confines unavoidable inline compatibility to style attributes.',
 );
 assert(
