@@ -328,6 +328,14 @@
   min-width: 0;
 }
 
+.ff-home-demo-mobile {
+  display: none;
+}
+
+.ff-home-demo-full {
+  min-width: 0;
+}
+
 .ff-home-demo-note {
   display: flex;
   align-items: center;
@@ -1198,6 +1206,39 @@
 }
 
 @media (max-width: 620px) {
+  .ff-home-demo-full { display: none; }
+  .ff-home-demo-note { display: none; }
+  .ff-home-demo-mobile {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.55rem 0.9rem;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    padding: 0.9rem 1rem;
+    box-shadow: var(--shadow-sm);
+  }
+  .ff-home-demo-mobile > div {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.55rem;
+  }
+  .ff-home-demo-mobile strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 0.78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ff-home-demo-mobile p {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    line-height: 1.5;
+  }
   .ff-review-preview-grid { grid-template-columns: 4.75rem minmax(0, 1fr); min-height: 21rem; }
   .ff-review-files { padding: 0.55rem; }
   .ff-preview-file { display: block; padding: 0.3rem; }
