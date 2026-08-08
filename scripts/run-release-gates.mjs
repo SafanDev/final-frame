@@ -102,8 +102,16 @@ if (full) {
       LIGHTHOUSE_BASE_URL: process.env.RELEASE_GATE_BASE_URL,
     },
   });
+  command(npmBinary, ['run', 'ops:verify-deployed-security'], {
+    cwd: join(root, 'final-frame-api'),
+    env: { DEPLOYED_BASE_URL: process.env.RELEASE_GATE_BASE_URL },
+  });
+  command(npmBinary, ['run', 'ops:load-slo'], {
+    cwd: join(root, 'final-frame-api'),
+    env: { LOAD_TEST_BASE_URL: process.env.RELEASE_GATE_BASE_URL },
+  });
 }
 
 console.log(full
-  ? 'All source, dependency, migration, image, staged-browser and Lighthouse gates passed.'
+  ? 'All automated source, dependency, migration, image, staged-browser, Lighthouse, deployed-security and load/SLO gates passed. Backup restore and dead-letter disposition remain environment-specific release evidence.'
   : 'All source, dependency, test and build gates passed.');

@@ -49,6 +49,22 @@ groups:
           summary: FinalFrame background worker is repeatedly failing
           description: "{{ $labels.worker }} has failed at least three times in fifteen minutes."
 
+      - alert: FinalFrameEmailDeadLetters
+        expr: finalframe_email_outbox_messages{status="ABANDONED"} > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: FinalFrame email dead letters require review
+          description: One or more email outbox messages exhausted automatic retries. Inspect before replaying.
+
+      - alert: FinalFrameStorageDeadLetters
+        expr: finalframe_storage_deletion_tasks{status="ABANDONED"} > 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: FinalFrame storage cleanup dead letters require review
+          description: One or more private-object deletion tasks exhausted automatic retries. Inspect and reconcile before replaying.
+
       - alert: FinalFrameFastWorkerStalled
         expr: |
           time() - finalframe_worker_last_success_timestamp_seconds{
