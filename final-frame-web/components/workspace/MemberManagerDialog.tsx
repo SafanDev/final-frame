@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Dialog from "@/components/ui/Dialog";
 import InlineAlert from "@/components/ui/InlineAlert";
 import { removeProjectMember, setProjectMemberApprover } from "@/lib/api/projects";
@@ -29,67 +29,88 @@ export default function MemberManagerDialog({
   onChanged,
 }: MemberManagerDialogProps) {
   const preferences = useUserPreferences();
+  const latestProjectVersionRef = useRef(projectVersion);
+  const [visibleMembers, setVisibleMembers] = useState(members);
   const [pendingMember, setPendingMember] = useState<ProjectMember | null>(null);
   const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
   const [currentVersion, setCurrentVersion] = useState(projectVersion);
   const [error, setError] = useState<{ message: string; requestId: string | null } | null>(null);
 
   useEffect(() => {
-    if (open) setCurrentVersion(projectVersion);
-  }, [open, projectVersion]);
+    latestProjectVersionRef.current = projectVersion;
+  }, [projectVersion]);
+
+  useEffect(() => {
+    if (!open) return;
+    setCurrentVersion(latestProjectVersionRef.current);
+    setVisibleMembers(members);
+  }, [members, open]);
 
   const isBusy = busyMemberId !== null;
 
   function close() {
-    if (isBusy) return;
     setPendingMember(null);
     setError(null);
     onClose();
   }
 
-  async function confirmRemoval() {
+  function confirmRemoval() {
     if (!pendingMember || isBusy) return;
-    setBusyMemberId(pendingMember.userId);
+    const target = pendingMember;
+    const previousMembers = visibleMembers;
+    const expectedVersion = currentVersion;
+    setBusyMemberId(target.userId);
+    setPendingMember(null);
     setError(null);
-    try {
-      const result = await removeProjectMember(projectId, pendingMember.userId, currentVersion);
-      const nextVersion = result.projectVersion ?? currentVersion + 1;
-      setCurrentVersion(nextVersion);
-      await onChanged(nextVersion);
-      setPendingMember(null);
-    } catch (caught) {
-      const normalized = normalizeApiError(caught);
-      setError({
-        message: getUserFacingErrorMessage(caught, "The Client could not be removed."),
-        requestId: normalized.requestId,
-      });
-    } finally {
-      setBusyMemberId(null);
-    }
+    setVisibleMembers((current) => current.filter((member) => member.userId !== target.userId));
+
+    void removeProjectMember(projectId, target.userId, expectedVersion)
+      .then((result) => {
+        const nextVersion = result.projectVersion ?? expectedVersion + 1;
+        setCurrentVersion(nextVersion);
+        void Promise.resolve(onChanged(nextVersion));
+      })
+      .catch((caught) => {
+        setVisibleMembers(previousMembers);
+        const normalized = normalizeApiError(caught);
+        setError({
+          message: getUserFacingErrorMessage(caught, "The Client could not be removed."),
+          requestId: normalized.requestId,
+        });
+      })
+      .finally(() => setBusyMemberId(null));
   }
 
-  async function toggleApprover(member: ProjectMember) {
+  function toggleApprover(member: ProjectMember) {
     if (isBusy) return;
+    const previous = member.isApprover;
+    const next = !previous;
+    const expectedVersion = currentVersion;
     setBusyMemberId(member.userId);
     setError(null);
-    try {
-      const result = await setProjectMemberApprover(
-        projectId,
-        member.userId,
-        !member.isApprover,
-        currentVersion,
-      );
-      setCurrentVersion(result.projectVersion);
-      await onChanged(result.projectVersion);
-    } catch (caught) {
-      const normalized = normalizeApiError(caught);
-      setError({
-        message: getUserFacingErrorMessage(caught, "The approval role could not be changed."),
-        requestId: normalized.requestId,
-      });
-    } finally {
-      setBusyMemberId(null);
-    }
+    setVisibleMembers((current) => current.map((candidate) => candidate.userId === member.userId
+      ? { ...candidate, isApprover: next }
+      : candidate));
+
+    void setProjectMemberApprover(projectId, member.userId, next, expectedVersion)
+      .then((result) => {
+        setCurrentVersion(result.projectVersion);
+        setVisibleMembers((current) => current.map((candidate) => candidate.userId === member.userId
+          ? { ...candidate, isApprover: result.isApprover }
+          : candidate));
+        void Promise.resolve(onChanged(result.projectVersion));
+      })
+      .catch((caught) => {
+        setVisibleMembers((current) => current.map((candidate) => candidate.userId === member.userId
+          ? { ...candidate, isApprover: previous }
+          : candidate));
+        const normalized = normalizeApiError(caught);
+        setError({
+          message: getUserFacingErrorMessage(caught, "The approval role could not be changed."),
+          requestId: normalized.requestId,
+        });
+      })
+      .finally(() => setBusyMemberId(null));
   }
 
   return (
@@ -98,9 +119,8 @@ export default function MemberManagerDialog({
       onClose={close}
       title="Workspace access"
       description="Manage Client access and choose who may give final approval. Access changes take effect immediately."
-      busy={isBusy}
       maxWidthClassName="max-w-2xl"
-      footer={<button type="button" onClick={close} disabled={isBusy} className="min-h-11 rounded-xl border border-white/10 px-5 text-sm font-semibold text-zinc-300 hover:bg-white/5 disabled:opacity-50">Done</button>}
+      footer={<button type="button" onClick={close} className="min-h-11 rounded-xl border border-white/10 px-5 text-sm font-semibold text-zinc-300 hover:bg-white/5">Done</button>}
     >
       <div className="space-y-3">
         <div className="flex items-center gap-4 rounded-xl border border-sky-400/20 bg-sky-500/[0.06] p-4">
@@ -108,14 +128,14 @@ export default function MemberManagerDialog({
           <div className="min-w-0"><p className="truncate font-bold text-white">{ownerName}</p><p className="mt-1 text-xs font-semibold text-sky-300">Designer · Project owner</p></div>
         </div>
 
-        {members.length === 0 ? (
+        {visibleMembers.length === 0 ? (
           <div className="rounded-xl border border-dashed border-white/10 p-7 text-center">
             <p className="font-semibold text-zinc-300">No Clients have joined</p>
             <p className="mt-2 text-sm leading-6 text-zinc-500">Use Share to invite a Client by email.</p>
           </div>
         ) : (
           <ul className="space-y-2">
-            {members.map((member) => (
+            {visibleMembers.map((member) => (
               <li key={member.id} className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-4 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-400 text-xs font-black text-zinc-950">{member.user.name.slice(0, 2).toUpperCase()}</div>
@@ -128,7 +148,7 @@ export default function MemberManagerDialog({
                   </div>
                 </div>
                 <div className="flex gap-2 sm:justify-end">
-                  <button type="button" onClick={() => void toggleApprover(member)} disabled={isBusy} className="min-h-10 flex-1 rounded-lg border border-white/10 px-3 text-xs font-bold text-zinc-200 hover:bg-white/5 disabled:opacity-50 sm:flex-none">{busyMemberId === member.userId ? "Updating…" : member.isApprover ? "Remove approval" : "Make approver"}</button>
+                  <button type="button" onClick={() => toggleApprover(member)} disabled={isBusy} className="min-h-10 flex-1 rounded-lg border border-white/10 px-3 text-xs font-bold text-zinc-200 hover:bg-white/5 disabled:opacity-50 sm:flex-none">{member.isApprover ? "Remove approval" : "Make approver"}</button>
                   <button type="button" onClick={() => { setPendingMember(member); setError(null); }} disabled={isBusy} className="min-h-10 flex-1 rounded-lg border border-rose-400/20 px-3 text-xs font-bold text-rose-300 hover:bg-rose-500/10 disabled:opacity-50 sm:flex-none">Remove</button>
                 </div>
               </li>
@@ -142,8 +162,8 @@ export default function MemberManagerDialog({
           <p id="remove-member-title" className="font-bold text-rose-100">Remove {pendingMember.user.name}?</p>
           <p className="mt-2 text-sm leading-6 text-rose-100/80">Their access and live connection end immediately. Existing feedback and activity remain in the audit record.</p>
           <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" onClick={() => setPendingMember(null)} disabled={isBusy} className="min-h-10 rounded-lg border border-white/10 px-4 text-xs font-semibold text-zinc-200 hover:bg-white/5 disabled:opacity-50">Cancel</button>
-            <button type="button" onClick={() => void confirmRemoval()} disabled={isBusy} className="min-h-10 rounded-lg bg-rose-500 px-4 text-xs font-bold text-white hover:bg-rose-400 disabled:opacity-50">{busyMemberId === pendingMember.userId ? "Removing…" : "Remove access"}</button>
+            <button type="button" onClick={() => setPendingMember(null)} className="min-h-10 rounded-lg border border-white/10 px-4 text-xs font-semibold text-zinc-200 hover:bg-white/5">Cancel</button>
+            <button type="button" onClick={confirmRemoval} className="min-h-10 rounded-lg bg-rose-500 px-4 text-xs font-bold text-white hover:bg-rose-400">Remove access</button>
           </div>
         </div>
       ) : null}

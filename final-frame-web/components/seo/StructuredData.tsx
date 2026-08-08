@@ -11,6 +11,7 @@ export default async function StructuredData({ data }: StructuredDataProps) {
   return (
     <script
       nonce={nonce}
+      suppressHydrationWarning
       type="application/ld+json"
       dangerouslySetInnerHTML={{ __html: json }}
     />

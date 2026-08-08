@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 
 type ReactPdfModule = typeof import("react-pdf");
+
+const pdfRequestOptions = Object.freeze({ withCredentials: true });
 
 interface PdfPageLike {
   getViewport: (options: { scale: number }) => { width: number; height: number };
@@ -15,10 +17,12 @@ interface PdfDocumentLike {
 }
 
 interface PdfEngineProps {
-  fileUrl: string;
+  fileUrl?: string;
+  fileData?: Uint8Array;
   fileName: string;
   onLoad?: () => void;
   onError?: () => void;
+  withCredentials?: boolean;
 }
 
 interface LazyPdfPageProps {
@@ -108,7 +112,7 @@ function LazyPdfPage({
   );
 }
 
-export default function PdfEngine({ fileUrl, fileName, onLoad, onError }: PdfEngineProps) {
+export default function PdfEngine({ fileUrl = "", fileData, fileName, onLoad, onError, withCredentials = true }: PdfEngineProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [pdfModule, setPdfModule] = useState<ReactPdfModule | null>(null);
   const [moduleError, setModuleError] = useState("");
@@ -156,8 +160,9 @@ export default function PdfEngine({ fileUrl, fileName, onLoad, onError }: PdfEng
     setNumPages(0);
     setPageRatios([]);
     setError("");
-  }, [fileUrl]);
+  }, [fileData, fileUrl]);
 
+  const documentSource = useMemo(() => (fileData ? { data: fileData } : fileUrl), [fileData, fileUrl]);
   const DocumentComponent = pdfModule?.Document;
   const PageComponent = pdfModule?.Page;
 
@@ -197,10 +202,13 @@ export default function PdfEngine({ fileUrl, fileName, onLoad, onError }: PdfEng
         moduleError ? null : <div role="status" className="p-16 text-center text-sm text-zinc-400">Loading PDF viewer…</div>
       ) : (
         <DocumentComponent
-          file={fileUrl}
+          file={documentSource}
+          options={withCredentials && !fileData ? pdfRequestOptions : undefined}
           onLoadSuccess={handleDocumentLoaded}
           onLoadError={() => {
-            setError("The PDF preview could not be opened. A fresh secure preview is being requested.");
+            setError(withCredentials
+              ? "The PDF preview could not be opened. A fresh secure preview is being requested."
+              : "The local PDF preview could not be opened. The secure review copy will still be prepared.");
             onError?.();
           }}
           loading={<div role="status" className="p-16 text-center text-sm text-zinc-400">Loading PDF…</div>}

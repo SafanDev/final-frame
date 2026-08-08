@@ -92,17 +92,31 @@ test.describe("authenticated integration", () => {
 
   test("opens account security with a revocable database-backed session", async ({ page }) => {
     await page.goto("/account");
-    await expect(page.getByRole("heading", { name: /control access without clutter/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Download account data", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /revoke all sessions/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^account$/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Download your data", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^sign out everywhere$/i })).toBeVisible();
 
-    const deleteCard = page.getByRole("heading", { name: /delete account/i }).locator("..");
-    const deleteButton = deleteCard.getByRole("button", { name: /^delete account$/i });
+    const deleteCard = page
+      .getByRole("heading", { name: /^delete account$/i })
+      .locator("xpath=ancestor::form");
+
+    await expect(deleteCard.getByLabel(/^password$/i)).toHaveCount(0);
+
+    await deleteCard.getByRole("button", { name: /^delete$/i }).click();
+
+    const deleteButton = deleteCard.getByRole("button", {
+      name: /^delete account$/i,
+    });
+
     await expect(deleteButton).toBeDisabled();
-    await deleteCard.getByLabel(/current password/i).fill(password || "");
+
+    await deleteCard.getByLabel(/^password$/i).fill(password || "");
     await deleteCard.getByLabel(/type delete to confirm/i).fill("delete");
+
     await expect(deleteButton).toBeDisabled();
+
     await deleteCard.getByLabel(/type delete to confirm/i).fill("DELETE");
+
     await expect(deleteButton).toBeEnabled();
   });
 

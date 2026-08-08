@@ -6,7 +6,7 @@ import InlineAlert from "@/components/ui/InlineAlert";
 import { deleteAsset } from "@/lib/api/assets";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
 import { invalidateAssetUrl } from "@/lib/storage/signed-url-cache";
-import type { DeleteAssetScope, ProjectAsset } from "@/lib/api/types";
+import type { DeleteAssetResponse, DeleteAssetScope, ProjectAsset } from "@/lib/api/types";
 
 interface AssetDeleteDialogProps {
   open: boolean;
@@ -15,7 +15,7 @@ interface AssetDeleteDialogProps {
   stackSize: number;
   expectedVersion: number;
   onClose: () => void;
-  onDeleted: (scope: DeleteAssetScope, asset: ProjectAsset) => Promise<void> | void;
+  onDeleted: (scope: DeleteAssetScope, asset: ProjectAsset, result: DeleteAssetResponse) => Promise<void> | void;
 }
 
 export default function AssetDeleteDialog({ open, projectId, asset, stackSize, expectedVersion, onClose, onDeleted }: AssetDeleteDialogProps) {
@@ -38,9 +38,9 @@ export default function AssetDeleteDialog({ open, projectId, asset, stackSize, e
     setIsDeleting(true);
     setError(null);
     try {
-      await deleteAsset(projectId, asset.id, scope, expectedVersion);
+      const result = await deleteAsset(projectId, asset.id, scope, expectedVersion);
       invalidateAssetUrl(asset.id);
-      await onDeleted(scope, asset);
+      await onDeleted(scope, asset, result);
       onClose();
     } catch (caught) {
       const normalized = normalizeApiError(caught);

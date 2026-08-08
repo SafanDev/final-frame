@@ -10,6 +10,8 @@ import type {
   assetDownloadResponseSchema,
   assetMutationResponseSchema,
   assetProcessingStatusSchema,
+  assetProcessingSnapshotSchema,
+  assetProcessingSnapshotResponseSchema,
   assetRenameResponseSchema,
   assetSchema,
   basicUserSchema,
@@ -51,6 +53,8 @@ export type ProjectMutationResponse = z.infer<typeof projectMutationResponseSche
 export type ProjectMember = z.infer<typeof projectMemberSchema>;
 export type ProjectComment = z.infer<typeof commentSchema>;
 export type ProjectAsset = z.infer<typeof assetSchema>;
+export type AssetProcessingSnapshot = z.infer<typeof assetProcessingSnapshotSchema>;
+export type AssetProcessingSnapshotResponse = z.infer<typeof assetProcessingSnapshotResponseSchema>;
 export type AssetMutationResponse = z.infer<typeof assetMutationResponseSchema>;
 export type ActivityLog = z.infer<typeof activityLogSchema>;
 export type ApprovalEvent = z.infer<typeof approvalEventSchema>;

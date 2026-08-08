@@ -4,8 +4,8 @@ import AccountClient from "@/components/account/AccountClient";
 import { getCurrentSession } from "@/lib/auth/session";
 
 export const metadata: Metadata = {
-  title: "Account and security",
-  description: "Manage FinalFrame account security and data rights.",
+  title: "Account",
+  description: "Manage your FinalFrame account, preferences, security, and data.",
   robots: { index: false, follow: false },
 };
 

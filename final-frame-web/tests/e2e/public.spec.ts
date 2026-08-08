@@ -13,12 +13,16 @@ test.describe("public and authentication surfaces", () => {
     const structuredDataText = await structuredDataScripts.first().textContent();
     const structuredData = JSON.parse(
       structuredDataText ?? "null",
-    ) as Array<{ "@type"?: string }>;
-    expect(structuredData).toHaveLength(2);
-    expect(structuredData.map((item) => item["@type"])).toEqual([
-      "SoftwareApplication",
-      "FAQPage",
-    ]);
+    ) as {
+      "@type"?: string;
+      applicationCategory?: string;
+      operatingSystem?: string;
+    };
+    expect(structuredData).toMatchObject({
+      "@type": "SoftwareApplication",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+    });
     await expect(
       page.getByRole("link", {
         name: /create account|start a review|create a workspace/i,
@@ -42,18 +46,21 @@ test.describe("public and authentication surfaces", () => {
     const token = "a".repeat(64);
     await page.goto(`/invite#token=${token}`);
     await expect(page).toHaveURL(/\/invite$/);
-    await expect(page.getByRole("heading", { name: /joining the workspace/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /project invitation/i })).toBeVisible();
     const stored = await page.evaluate(() => window.sessionStorage.getItem("finalframe.invitation-token"));
     expect(stored).toBe(token);
-    const signIn = page.getByRole("link", { name: /sign in and return here/i });
+    const signIn = page
+      .getByLabel("Project invitation")
+      .getByRole("link", { name: /^sign in$/i });
     await expect(signIn).toHaveAttribute("href", "/login?callbackUrl=%2Finvite");
   });
 
-  test("public registration creates Client accounts only", async ({ page }) => {
+  test("public registration does not expose role escalation controls", async ({ page }) => {
     await page.goto("/register");
-    await expect(page.getByRole("heading", { name: /create your account/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /create client account/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^create account$/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^create account$/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /designer create and deliver projects/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /client review invited projects/i })).toHaveCount(0);
   });
 
   test("password reset and verification tokens leave the address bar immediately", async ({ page }) => {
@@ -64,7 +71,7 @@ test.describe("public and authentication surfaces", () => {
 
     await page.goto(`/verify-email#token=${token}`);
     await expect(page).toHaveURL(/\/verify-email$/);
-    await expect(page.getByRole("heading", { name: /verify your email/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^verify email$/i })).toBeVisible();
   });
 
   test("private dashboard redirects unauthenticated visitors to login", async ({ page }) => {

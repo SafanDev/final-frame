@@ -40,6 +40,7 @@ import {
   reserveAiRequest,
 } from '../services/quotas.js';
 import { emitWorkspaceRefresh } from '../services/realtime.js';
+import { wakeAssetProcessing } from '../services/asset-processing-scheduler.js';
 import { queueStorageDeletion } from '../services/storage-cleanup.js';
 import { runSerializableTransaction } from '../services/transaction.js';
 import {
@@ -293,6 +294,7 @@ const completeAssetUpload = async (request: AuthRequest, response: Response): Pr
     return { asset: created, projectVersion };
   });
 
+  wakeAssetProcessing(request);
   emitWorkspaceRefresh(request, projectId, 'asset-uploaded');
   disableResponseCaching(response);
   response.status(202).json({
@@ -612,6 +614,7 @@ router.post('/:assetId/retry-processing', requireAuth, async (request: AuthReque
     return incrementProjectVersion(transaction, projectId, asset.project.version);
   });
 
+  wakeAssetProcessing(request);
   emitWorkspaceRefresh(request, projectId, 'asset-processing-retried');
   disableResponseCaching(response);
   response.status(202).json({ message: 'File processing was queued again.', projectVersion });

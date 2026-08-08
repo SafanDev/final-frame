@@ -18,10 +18,10 @@ import { formatDateTime } from "@/lib/utils/format";
 const safeHref = (href: string | null): string => href?.startsWith("/") && !href.startsWith("//") ? href : "/notifications";
 
 const deliveryLabel = (item: NotificationItem): string | null => {
-  if (item.emailStatus === "SENT") return "Email delivered";
+  if (item.emailStatus === "SENT") return "Email sent";
   if (item.emailStatus === "PENDING" || item.emailStatus === "PROCESSING") return "Email queued";
   if (item.emailStatus === "FAILED") return "Email retrying";
-  if (item.emailStatus === "ABANDONED") return "Email delivery stopped";
+  if (item.emailStatus === "ABANDONED") return "Email stopped";
   return null;
 };
 
@@ -39,13 +39,21 @@ export default function NotificationInbox() {
     const controller = new AbortController();
     void getNotifications({}, controller.signal)
       .then((page) => {
+        if (controller.signal.aborted) return;
         setItems(page.items);
         setUnreadCount(page.unreadCount);
         setNextCursor(page.pageInfo.nextCursor);
         setHasMore(page.pageInfo.hasMore);
+        setError(null);
       })
-      .catch((caught) => setError(getUserFacingErrorMessage(normalizeApiError(caught), "Notifications could not be loaded.")))
-      .finally(() => setLoading(false));
+      .catch((caught) => {
+        const normalized = normalizeApiError(caught);
+        if (normalized.kind === "aborted") return;
+        setError(getUserFacingErrorMessage(normalized, "Notifications could not be loaded."));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
     return () => controller.abort();
   }, []);
 
@@ -56,7 +64,7 @@ export default function NotificationInbox() {
     try {
       await markNotificationRead(item.id);
     } catch {
-      toast.error("This notification could not be marked as read.");
+      toast.error("Could not mark this update as read.");
     }
   }
 
@@ -67,7 +75,7 @@ export default function NotificationInbox() {
     setUnreadCount(0);
     try {
       await markAllNotificationsRead();
-      toast.success("All notifications marked as read.");
+      toast.success("Inbox cleared.");
     } catch (caught) {
       setError(getUserFacingErrorMessage(normalizeApiError(caught), "Notifications could not be updated."));
     }
@@ -92,46 +100,52 @@ export default function NotificationInbox() {
     }
   }
 
-  if (loading) return <div className="py-14 text-sm text-zinc-400" role="status">Loading notifications…</div>;
+  if (loading) return <div className="ff-inbox-loading" role="status">Loading inbox…</div>;
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-zinc-400">{unreadCount ? `${unreadCount} unread update${unreadCount === 1 ? "" : "s"}` : "You are up to date."}</p>
-        <Button type="button" variant="secondary" disabled={!unreadCount} onClick={() => void markAll()}>Mark all read</Button>
+    <div className="ff-inbox-content">
+      <div className="ff-inbox-toolbar">
+        <p>{unreadCount ? `${unreadCount} unread` : "All caught up"}</p>
+        {unreadCount ? <Button type="button" variant="ghost" size="sm" onClick={() => void markAll()}>Mark all read</Button> : null}
       </div>
-      {error ? <InlineAlert tone="error" title="Notification action failed" className="mt-5">{error}</InlineAlert> : null}
+
+      {error ? <InlineAlert tone="error" title="Could not update Inbox" className="ff-inbox-alert">{error}</InlineAlert> : null}
+
       {items.length ? (
-        <ol className="mt-6 space-y-3">
+        <ol className="ff-inbox-list">
           {items.map((item) => {
             const delivery = deliveryLabel(item);
             return (
-              <li key={item.id} className={`rounded-2xl border p-5 transition ${item.readAt ? "border-white/10 bg-[#111214]" : "border-emerald-300/25 bg-emerald-400/[0.045]"}`}>
-                <Link href={safeHref(item.href)} onClick={() => void markRead(item)} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-base font-black text-white">{item.title}</p>
-                      <p className="mt-2 text-sm leading-6 text-zinc-400">{item.body}</p>
+              <li key={item.id} className={`ff-inbox-item${item.readAt ? "" : " is-unread"}`}>
+                <Link href={safeHref(item.href)} onClick={() => void markRead(item)} className="ff-inbox-link">
+                  <span className="ff-inbox-dot" aria-hidden="true" />
+                  <div className="ff-inbox-item-main">
+                    <div className="ff-inbox-item-head">
+                      <h2>{item.title}</h2>
+                      <time dateTime={item.createdAt}>{formatDateTime(item.createdAt, preferences)}</time>
                     </div>
-                    {!item.readAt ? <span className="rounded-full bg-emerald-300 px-2.5 py-1 text-xs font-black uppercase tracking-[0.12em] text-zinc-950">New</span> : null}
+                    <p>{item.body}</p>
+                    <div className="ff-inbox-meta">
+                      {item.project ? <span>{item.project.title}</span> : null}
+                      {delivery ? <span>{delivery}</span> : null}
+                    </div>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
-                    <time dateTime={item.createdAt}>{formatDateTime(item.createdAt, preferences)}</time>
-                    {item.project ? <span>{item.project.title}</span> : null}
-                    {delivery ? <span>{delivery}</span> : null}
-                  </div>
+                  <span className="ff-inbox-arrow" aria-hidden="true">↗</span>
                 </Link>
               </li>
             );
           })}
         </ol>
       ) : (
-        <div className="mt-6 rounded-2xl border border-dashed border-white/12 bg-[#111214] p-8 text-center">
-          <h2 className="text-lg font-black text-white">No notifications yet</h2>
-          <p className="mt-2 text-sm text-zinc-500">Project invitations, feedback and review decisions will appear here.</p>
+        <div className="ff-inbox-empty">
+          <span className="ff-inbox-empty-mark" aria-hidden="true">✓</span>
+          <h2>Nothing new</h2>
+          <p>New review activity will appear here.</p>
+          <Link href="/app">Back to projects <span aria-hidden="true">↗</span></Link>
         </div>
       )}
-      {hasMore ? <div className="mt-6 flex justify-center"><Button type="button" variant="secondary" loading={loadingMore} onClick={() => void loadMore()}>Load earlier updates</Button></div> : null}
+
+      {hasMore ? <div className="ff-inbox-more"><Button type="button" variant="secondary" size="sm" loading={loadingMore} onClick={() => void loadMore()}>Load earlier</Button></div> : null}
     </div>
   );
 }

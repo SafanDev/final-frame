@@ -84,7 +84,7 @@ export default function InviteProjectDialog({
       setInviteUrl(result.inviteUrl);
       setExpiresAt(result.expiresAt);
       setDeliveryStatus(result.deliveryStatus);
-      await onInvited(result.projectVersion);
+      void Promise.resolve(onInvited(result.projectVersion));
       toast.success(result.deliveryStatus === "SENT" ? "Client invitation sent." : "Invite link ready.");
     } catch (caught) {
       const normalized = normalizeApiError(caught);

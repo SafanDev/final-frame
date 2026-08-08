@@ -27,6 +27,7 @@ export const apiRoutes = Object.freeze({
     update: (projectId: string) => `/api/projects/${id(projectId)}`,
     delete: (projectId: string) => `/api/projects/${id(projectId)}`,
     activity: (projectId: string) => `/api/projects/${id(projectId)}/activity`,
+    processingStatus: (projectId: string) => `/api/projects/${id(projectId)}/assets/processing-status`,
     auditExport: (projectId: string) => `/api/projects/${id(projectId)}/audit-export`,
     approvalCertificate: (projectId: string, approvalEventId: string) =>
       `/api/projects/${id(projectId)}/approval-events/${id(approvalEventId)}/certificate`,

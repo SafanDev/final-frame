@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { toast } from "sonner";
 import VoiceNotePlayer from "@/components/feedback/VoiceNotePlayer";
 import InlineAlert from "@/components/ui/InlineAlert";
+import WorkspaceIcon from "@/components/workspace/WorkspaceIcon";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
 import { setCommentResolved, updateComment } from "@/lib/api/comments";
 import type { ProjectComment } from "@/lib/api/types";
 import { composeFeedbackText, splitFeedbackText } from "@/lib/feedback/transcript";
 import { useUserPreferences } from "@/contexts/UserPreferencesContext";
 import { formatDateTime } from "@/lib/utils/format";
+import { copyTextToClipboard } from "@/lib/utils/clipboard";
+import { buildFeedbackDeepLink } from "@/lib/workspace/review-navigation";
+import { isOptimisticComment } from "@/lib/workspace/optimistic-feedback";
 
 interface CommentCardProps {
   projectId: string;
@@ -16,16 +21,17 @@ interface CommentCardProps {
   currentUserId: string | null;
   comment: ProjectComment;
   isLocked: boolean;
+  isOnline: boolean;
   isActive: boolean;
   onActivate: (comment: ProjectComment) => void;
   onUpdated: (comment: ProjectComment) => void;
-  onResolved: (assetId: string, commentId: string, isResolved: boolean) => void;
+  onResolved: (assetId: string, commentId: string, isResolved: boolean, announce?: boolean) => void;
   onRequestDelete: (comment: ProjectComment) => void;
 }
 
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest("button, a, input, textarea, select, audio"));
+  return target instanceof Element && Boolean(target.closest("button, a, input, textarea, select, audio, summary"));
 }
 
 function formatVideoTime(seconds: number): string {
@@ -40,6 +46,7 @@ export default function CommentCard({
   currentUserId,
   comment,
   isLocked,
+  isOnline,
   isActive,
   onActivate,
   onUpdated,
@@ -48,6 +55,7 @@ export default function CommentCard({
 }: CommentCardProps) {
   const preferences = useUserPreferences();
   const editInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const utilityMenuRef = useRef<HTMLDetailsElement | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(() => splitFeedbackText(comment.text).note);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,7 +65,8 @@ export default function CommentCard({
   const isOwner = currentUserId === ownerId;
   const isAuthor = currentUserId === comment.authorId;
   const isDesignerComment = comment.authorId === ownerId;
-  const canDelete = !isLocked && isAuthor;
+  const isPendingPersistence = isOptimisticComment(comment);
+  const canDelete = !isLocked && isAuthor && !isPendingPersistence;
   const hasLocation = comment.xPos !== null && comment.yPos !== null;
   const hasAnchor = comment.anchorType !== "GENERAL";
   const anchorLabel = comment.timestamp !== null
@@ -83,6 +92,10 @@ export default function CommentCard({
 
   async function saveEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!isOnline) {
+      toast.error("Reconnect to update feedback.");
+      return;
+    }
     const nextText = editedText;
     if (isSaving || nextText === comment.text || (!nextText && !comment.hasAudio)) {
       setIsEditing(false);
@@ -91,11 +104,18 @@ export default function CommentCard({
 
     setIsSaving(true);
     setError(null);
+    const previous = comment;
+    const now = new Date().toISOString();
+    const optimistic = { ...comment, text: nextText, editedAt: now, updatedAt: now };
+    onUpdated(optimistic);
+    setIsEditing(false);
     try {
       const updated = await updateComment(projectId, comment.assetId, comment.id, nextText);
       onUpdated(updated);
-      setIsEditing(false);
     } catch (caught) {
+      onUpdated(previous);
+      setEditText(splitFeedbackText(previous.text).note);
+      setIsEditing(true);
       const normalized = normalizeApiError(caught);
       setError({
         message: getUserFacingErrorMessage(caught, "The feedback could not be updated."),
@@ -108,13 +128,20 @@ export default function CommentCard({
 
   async function toggleResolved() {
     if (!isOwner || isLocked || isResolving) return;
+    if (!isOnline) {
+      toast.error("Reconnect to change feedback status.");
+      return;
+    }
     setIsResolving(true);
     setError(null);
-    const next = !comment.isResolved;
+    const previous = comment.isResolved;
+    const next = !previous;
+    onResolved(comment.assetId, comment.id, next, false);
     try {
       await setCommentResolved(projectId, comment.assetId, comment.id, next);
-      onResolved(comment.assetId, comment.id, next);
+      onResolved(comment.assetId, comment.id, next, true);
     } catch (caught) {
+      onResolved(comment.assetId, comment.id, previous, false);
       const normalized = normalizeApiError(caught);
       setError({
         message: getUserFacingErrorMessage(caught, "The feedback status could not be changed."),
@@ -125,36 +152,67 @@ export default function CommentCard({
     }
   }
 
+  async function copyFeedbackLink() {
+    try {
+      await copyTextToClipboard(buildFeedbackDeepLink(window.location.href, comment.assetId, comment.id));
+      utilityMenuRef.current?.removeAttribute("open");
+      toast.success("Feedback link copied.");
+    } catch {
+      toast.error("Could not copy the feedback link.");
+    }
+  }
+
+  async function copyFeedbackText() {
+    try {
+      await copyTextToClipboard(comment.text);
+      utilityMenuRef.current?.removeAttribute("open");
+      toast.success("Feedback copied.");
+    } catch {
+      toast.error("Could not copy the feedback.");
+    }
+  }
+
   return (
     <article
       id={`comment-${comment.id}`}
+      data-feedback-selection={comment.id}
       onClick={(event) => { if (hasAnchor && !isInteractiveTarget(event.target)) onActivate(comment); }}
-      className={`rounded-xl border p-3 transition ${isActive ? "border-emerald-400/50 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.02] hover:border-white/20"} ${hasAnchor ? "cursor-pointer" : ""}`}
+      className={`ff-workspace-comment-card ${isActive ? "is-active" : ""} ${hasAnchor ? "is-anchored" : ""} ${isPendingPersistence ? "is-syncing" : ""}`}
     >
-      <div className="flex items-start gap-3">
+      <div className="ff-workspace-comment-head">
         <button
           type="button"
           onClick={() => onActivate(comment)}
           aria-pressed={isActive}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-black outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-400 ${isDesignerComment ? "bg-sky-400 text-sky-950" : "bg-emerald-400 text-emerald-950"}`}
+          className={`ff-workspace-comment-avatar ${isDesignerComment ? "is-designer" : "is-client"}`}
           aria-label={hasAnchor ? `Show ${comment.author?.name ?? "user"}'s anchored feedback` : `Select ${comment.author?.name ?? "user"}'s general feedback`}
         >
           {(comment.author?.name ?? "U").slice(0, 2).toUpperCase()}
         </button>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <p className="truncate text-sm font-bold text-white">{comment.author?.name ?? "Former member"}</p>
-            <span className={`rounded-md px-1.5 py-0.5 text-xs font-bold uppercase tracking-[0.12em] ${isDesignerComment ? "bg-sky-500/10 text-sky-300" : "bg-emerald-500/10 text-emerald-300"}`}>{isDesignerComment ? "Designer" : "Client"}</span>
-            {comment.isResolved ? <span className="rounded-md bg-zinc-700/50 px-1.5 py-0.5 text-xs font-bold uppercase tracking-[0.12em] text-zinc-300">Resolved</span> : null}
+        <div className="ff-workspace-comment-copy">
+          <div className="ff-workspace-comment-author-row">
+            <p className="ff-workspace-comment-author">{comment.author?.name ?? "Former member"}</p>
+            <span className={`ff-workspace-comment-role ${isDesignerComment ? "is-designer" : "is-client"}`}>{isDesignerComment ? "Designer" : "Client"}</span>
+            {comment.isResolved ? <span className="ff-workspace-comment-resolved">Resolved</span> : null}
           </div>
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="ff-workspace-comment-meta">
             <time dateTime={comment.createdAt}>{formatDateTime(comment.createdAt, preferences)}</time>
             {comment.editedAt !== null ? " · edited" : ""}
             {` · ${anchorLabel}`}
           </p>
         </div>
       </div>
+
+      {!isPendingPersistence ? (
+        <details ref={utilityMenuRef} className="ff-workspace-comment-more" data-pin-ignore="true">
+          <summary aria-label="Feedback options" data-tooltip="Feedback options">•••</summary>
+          <div className="ff-workspace-comment-more-menu" role="menu">
+            <button type="button" role="menuitem" onClick={() => void copyFeedbackLink()}><WorkspaceIcon name="link" />Copy link</button>
+            <button type="button" role="menuitem" onClick={() => void copyFeedbackText()}><WorkspaceIcon name="copy" />Copy text</button>
+          </div>
+        </details>
+      ) : null}
 
       {isEditing ? (
         <form onSubmit={saveEdit} className="mt-4">
@@ -171,7 +229,7 @@ export default function CommentCard({
           />
           <div className="mt-2 flex justify-end gap-2">
             <button type="button" onClick={() => { setIsEditing(false); setEditText(splitFeedbackText(comment.text).note); setError(null); }} disabled={isSaving} className="min-h-9 rounded-lg border border-white/10 px-3 text-xs font-semibold text-zinc-300 hover:bg-white/5 disabled:opacity-50">Cancel</button>
-            <button type="submit" disabled={isSaving || editedText === comment.text || editedText.length > 5_000 || (!editText.trim() && !comment.hasAudio)} className="min-h-9 rounded-lg bg-emerald-400 px-3 text-xs font-bold text-zinc-950 hover:bg-emerald-300 disabled:opacity-45">{isSaving ? "Saving…" : "Save"}</button>
+            <button type="submit" disabled={isSaving || editedText === comment.text || editedText.length > 5_000 || (!editText.trim() && !comment.hasAudio)} className="min-h-9 rounded-lg bg-emerald-400 px-3 text-xs font-bold text-zinc-950 hover:bg-emerald-300 disabled:opacity-45">Save</button>
           </div>
         </form>
       ) : (
@@ -182,24 +240,24 @@ export default function CommentCard({
               <VoiceNotePlayer projectId={projectId} assetId={comment.assetId} commentId={comment.id} initialUrl={comment.audioUrl} />
             </div>
           ) : null}
-          {displayText.note ? <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">{displayText.note}</p> : null}
+          {displayText.note ? <p className="ff-workspace-comment-body">{displayText.note}</p> : null}
           {displayText.transcript ? (
             <div className="mt-3 rounded-xl border border-sky-400/15 bg-sky-500/[0.06] p-3">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-sky-300">Transcript</p>
               <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">{displayText.transcript}</p>
             </div>
           ) : null}
-          {!comment.hasAudio && !displayText.note && !displayText.transcript ? <p className="mt-4 text-sm italic text-zinc-500">No text supplied</p> : null}
+          {!comment.hasAudio && !displayText.note && !displayText.transcript ? <p className="ff-workspace-comment-empty">No text supplied</p> : null}
         </>
       )}
 
       {error ? <InlineAlert tone="error" title="Feedback action failed" requestId={error.requestId} className="mt-3">{error.message}</InlineAlert> : null}
 
-      {!isEditing && !isLocked && (isAuthor || isOwner) ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
-          {isAuthor ? <button type="button" onClick={() => { setIsEditing(true); setError(null); }} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-white">Edit</button> : null}
-          {isOwner ? <button type="button" onClick={() => void toggleResolved()} disabled={isResolving} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-50">{isResolving ? "Updating…" : comment.isResolved ? "Reopen" : "Resolve"}</button> : null}
-          {canDelete ? <button type="button" onClick={() => onRequestDelete(comment)} className="ml-auto min-h-9 rounded-lg px-3 text-xs font-semibold text-rose-300 hover:bg-rose-500/10">Delete</button> : null}
+      {!isPendingPersistence && !isEditing && !isLocked && (isAuthor || isOwner) ? (
+        <div className="ff-workspace-comment-actions">
+          {isAuthor ? <button type="button" onClick={() => { if (!isOnline) { toast.error("Reconnect to edit feedback."); return; } setIsEditing(true); setError(null); }} disabled={isSaving || !isOnline} title={!isOnline ? "Reconnect to edit" : undefined} className="ff-workspace-comment-action"><WorkspaceIcon name="edit" /><span>Edit</span></button> : null}
+          {isOwner ? <button type="button" onClick={() => void toggleResolved()} disabled={isResolving || !isOnline} title={!isOnline ? "Reconnect to update status" : undefined} className="ff-workspace-comment-action"><WorkspaceIcon name={comment.isResolved ? "revision" : "approve"} /><span>{comment.isResolved ? "Reopen" : "Resolve"}</span></button> : null}
+          {canDelete ? <button type="button" onClick={() => { if (!isOnline) { toast.error("Reconnect to delete feedback."); return; } onRequestDelete(comment); }} disabled={!isOnline} title={!isOnline ? "Reconnect to delete" : undefined} className="ff-workspace-comment-action is-danger"><WorkspaceIcon name="trash" /><span>Delete</span></button> : null}
         </div>
       ) : null}
     </article>

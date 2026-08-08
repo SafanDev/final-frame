@@ -20,37 +20,30 @@ export default function GlobalError({
 
   return (
     <html lang="en">
-      <body className="min-h-screen bg-[#050607] px-5 py-10 font-sans text-zinc-100 antialiased">
-        <main className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-2xl items-center justify-center">
-          <section
-            className="w-full rounded-3xl border border-white/10 bg-[rgba(12,13,15,0.94)] p-7 text-center shadow-[0_30px_100px_rgba(0,0,0,0.45)] sm:p-10"
-            aria-labelledby="global-error-title"
-          >
-            <div
-              className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-300/20 bg-rose-500/10 text-2xl font-black text-rose-200"
-              aria-hidden="true"
-            >
-              !
-            </div>
-            <p className="mt-5 text-sm font-bold text-rose-200">Application error</p>
+      <body className="min-h-screen bg-[#090a0c] px-5 py-10 font-sans text-[#f5f7fa] antialiased">
+        <main className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl place-items-center">
+          <section className="w-full max-w-xl" aria-labelledby="global-error-title">
+            <p className="font-mono text-[0.68rem] font-bold uppercase tracking-[0.08em] text-[#ef9aa4]">
+              Application error
+            </p>
             <h1
               id="global-error-title"
-              className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl"
+              className="mt-3 text-[clamp(2rem,6vw,3rem)] font-extrabold leading-none tracking-[-0.05em] text-white"
             >
               FinalFrame could not start correctly
             </h1>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-zinc-400 sm:text-base">
-              Reload the application once. If the problem continues, verify the frontend environment configuration and confirm that the API is available.
+            <p className="mt-4 max-w-lg text-sm leading-7 text-[#b0b6c0]">
+              Reload the application once. If the problem continues, confirm that the frontend configuration and API are available.
             </p>
             {error.digest ? (
-              <code className="mt-5 inline-block max-w-full break-all rounded-lg border border-white/10 bg-black/25 px-3 py-2 font-mono text-xs text-zinc-400">
-                Support reference: {error.digest}
+              <code className="mt-4 block max-w-full break-all border-l-2 border-white/20 pl-3 font-mono text-xs text-[#9299a6]">
+                {error.digest}
               </code>
             ) : null}
             <button
               type="button"
               onClick={reset}
-              className="mt-8 inline-flex min-h-12 items-center justify-center rounded-xl border border-transparent bg-emerald-400 px-5 text-base font-bold text-emerald-950 transition hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050607]"
+              className="mt-7 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#4fd1a1] px-4 text-sm font-bold text-[#071b14] transition hover:bg-[#67deb2] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#67ffc4]"
             >
               Reload application
             </button>

@@ -17,15 +17,24 @@ import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
 import { sessionExpiredEventName } from "@/lib/api/client";
-import { loadWorkspace } from "@/lib/api/projects";
+import { loadAssetProcessingStatus, loadWorkspace } from "@/lib/api/projects";
 import type {
+  AssetProcessingSnapshot,
   ProjectAsset,
   ProjectComment,
   WorkspaceProject,
 } from "@/lib/api/types";
 import { createRealtimeClient, getSocketErrorCode } from "@/lib/realtime/client";
 import { mergeAssetsByFreshness } from "@/lib/workspace/asset-merge-core";
+import { parseFeedbackDeepLink } from "@/lib/workspace/review-navigation";
+import { getAssetUploadMimeType } from "@/lib/assets/file-policy";
 import { clearRemoteCursors, publishRemoteCursor, removeRemoteCursor } from "@/lib/realtime/cursor-events";
+import {
+  loadLastActiveAssetId,
+  loadWorkspaceChromeMemory,
+  saveLastActiveAssetId,
+  saveWorkspaceChromeMemory,
+} from "@/lib/workspace/review-session";
 import type {
   ActiveUser,
   FinalFrameSocket,
@@ -50,6 +59,16 @@ const currentWorkspaceLayoutMode = (): WorkspaceLayoutMode => {
   return "mobile";
 };
 
+export interface LocalUploadPreview {
+  token: string;
+  file: File;
+  objectUrl: string | null;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  assetId: string | null;
+}
+
 export interface WorkspaceIssue {
   kind: "load" | "not-found" | "access-revoked" | "deleted";
   title: string;
@@ -63,7 +82,6 @@ interface WorkspaceDataContextType {
   project: WorkspaceProject | null;
   setProject: Dispatch<SetStateAction<WorkspaceProject | null>>;
   isLoading: boolean;
-  isRefreshing: boolean;
   workspaceIssue: WorkspaceIssue | null;
   realtimeStatus: RealtimeStatus;
   realtimeMessage: string;
@@ -81,6 +99,10 @@ interface WorkspaceDataContextType {
   assetStacks: Record<string, ProjectAsset[]>;
   activeAsset: ProjectAsset | null;
   filteredComments: ProjectComment[];
+  localUploadPreview: LocalUploadPreview | null;
+  beginLocalUploadPreview: (file: File, displayName?: string) => string | null;
+  bindLocalUploadPreview: (token: string, assetId: string) => void;
+  clearLocalUploadPreview: (token?: string) => void;
 }
 
 interface WorkspaceUIContextType {
@@ -138,6 +160,58 @@ function issueFromError(error: unknown): WorkspaceIssue {
     requestId: normalized.requestId,
     retryable: normalized.retryable,
   };
+}
+
+function hasUnsettledAssets(assets: readonly ProjectAsset[]): boolean {
+  return assets.some((asset) => asset.processingStatus === "PENDING" || asset.processingStatus === "PROCESSING");
+}
+
+function applyAssetProcessingSnapshots(
+  current: WorkspaceProject,
+  snapshots: readonly AssetProcessingSnapshot[],
+): WorkspaceProject {
+  const byId = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]));
+  let changed = false;
+  const assets = current.assets.map((asset) => {
+    const snapshot = byId.get(asset.id);
+    if (!snapshot || snapshot.updatedAt.localeCompare(asset.updatedAt) < 0) return asset;
+    const next = { ...asset, ...snapshot };
+    if (
+      next.processingStatus === asset.processingStatus
+      && next.processingError === asset.processingError
+      && next.previewMimeType === asset.previewMimeType
+      && next.previewFileSize === asset.previewFileSize
+      && next.width === asset.width
+      && next.height === asset.height
+      && next.durationSeconds === asset.durationSeconds
+      && next.updatedAt === asset.updatedAt
+    ) return asset;
+    changed = true;
+    return next;
+  });
+
+  const finalSnapshot = current.finalAssetId ? byId.get(current.finalAssetId) : undefined;
+  const finalAssetChanged = Boolean(current.finalAsset && finalSnapshot && (
+    current.finalAsset.processingStatus !== finalSnapshot.processingStatus
+    || current.finalAsset.previewMimeType !== finalSnapshot.previewMimeType
+    || current.finalAsset.previewFileSize !== finalSnapshot.previewFileSize
+    || current.finalAsset.width !== finalSnapshot.width
+    || current.finalAsset.height !== finalSnapshot.height
+    || current.finalAsset.durationSeconds !== finalSnapshot.durationSeconds
+  ));
+  const finalAsset = current.finalAsset && finalSnapshot && finalAssetChanged
+    ? {
+        ...current.finalAsset,
+        processingStatus: finalSnapshot.processingStatus,
+        previewMimeType: finalSnapshot.previewMimeType,
+        previewFileSize: finalSnapshot.previewFileSize,
+        width: finalSnapshot.width,
+        height: finalSnapshot.height,
+        durationSeconds: finalSnapshot.durationSeconds,
+      }
+    : current.finalAsset;
+
+  return changed || finalAssetChanged ? { ...current, assets, finalAsset } : current;
 }
 
 function groupAssetStacks(assets: ProjectAsset[]): Record<string, ProjectAsset[]> {
@@ -200,7 +274,6 @@ export function WorkspaceProvider({
   const [project, setProject] = useState<WorkspaceProject | null>(null);
   const hasProject = Boolean(project);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [workspaceIssue, setWorkspaceIssue] = useState<WorkspaceIssue | null>(null);
   const [socket, setSocket] = useState<FinalFrameSocket | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>("connecting");
@@ -208,6 +281,11 @@ export function WorkspaceProvider({
   const [isOnline, setIsOnline] = useState(true);
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
+  const [localUploadPreview, setLocalUploadPreview] = useState<LocalUploadPreview | null>(null);
+  const hasPendingAssetProcessing = useMemo(
+    () => Boolean(project && hasUnsettledAssets(project.assets)),
+    [project],
+  );
 
   const [isAssetSidebarOpen, setIsAssetSidebarOpenState] = useState(false);
   const [isFeedbackSidebarOpen, setIsFeedbackSidebarOpenState] = useState(false);
@@ -219,13 +297,18 @@ export function WorkspaceProvider({
   const [activePinId, setActivePinId] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
+  const localUploadPreviewRef = useRef<LocalUploadPreview | null>(null);
   const projectRef = useRef<WorkspaceProject | null>(null);
   const loadSequenceRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
+  const processingStatusAbortRef = useRef<AbortController | null>(null);
+  const processingStatusSequenceRef = useRef(0);
   const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingCursorRef = useRef<{ assetId: string; x: number; y: number } | null>(null);
   const cursorFrameRef = useRef<number | null>(null);
   const layoutModeRef = useRef<WorkspaceLayoutMode | null>(null);
+  const deepLinkAppliedRef = useRef<string | null>(null);
+  const skipNextChromePersistRef = useRef(false);
   const sidebarPreferencesRef = useRef<Record<WorkspaceLayoutMode, { asset: boolean; feedback: boolean }>>({
     desktop: { asset: true, feedback: true },
     tablet: { asset: true, feedback: false },
@@ -236,6 +319,44 @@ export function WorkspaceProvider({
     projectRef.current = project;
   }, [project]);
 
+  const commitLocalUploadPreview = useCallback((next: LocalUploadPreview | null) => {
+    const current = localUploadPreviewRef.current;
+    if (current?.objectUrl && current.objectUrl !== next?.objectUrl) URL.revokeObjectURL(current.objectUrl);
+    localUploadPreviewRef.current = next;
+    setLocalUploadPreview(next);
+  }, []);
+
+  const beginLocalUploadPreview = useCallback((file: File, displayName?: string): string | null => {
+    const mimeType = getAssetUploadMimeType(file);
+    if (!mimeType) return null;
+    const token = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const needsObjectUrl = mimeType.startsWith("image/") || mimeType.startsWith("video/");
+    commitLocalUploadPreview({
+      token,
+      file,
+      objectUrl: needsObjectUrl ? URL.createObjectURL(file) : null,
+      fileName: displayName?.trim() || file.name,
+      mimeType,
+      fileSize: file.size,
+      assetId: null,
+    });
+    return token;
+  }, [commitLocalUploadPreview]);
+
+  const bindLocalUploadPreview = useCallback((token: string, assetId: string) => {
+    const current = localUploadPreviewRef.current;
+    if (!current || current.token !== token) return;
+    const next = { ...current, assetId };
+    localUploadPreviewRef.current = next;
+    setLocalUploadPreview(next);
+  }, []);
+
+  const clearLocalUploadPreview = useCallback((token?: string) => {
+    const current = localUploadPreviewRef.current;
+    if (!current || (token && current.token !== token)) return;
+    commitLocalUploadPreview(null);
+  }, [commitLocalUploadPreview]);
+
   useEffect(() => {
     // React Strict Mode intentionally mounts, cleans up, and mounts effects again
     // in development. Reset the guard on every effect setup so valid workspace
@@ -245,8 +366,12 @@ export function WorkspaceProvider({
     return () => {
       mountedRef.current = false;
       loadAbortRef.current?.abort();
+      processingStatusAbortRef.current?.abort();
       if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
       if (cursorFrameRef.current !== null) window.cancelAnimationFrame(cursorFrameRef.current);
+      const localPreview = localUploadPreviewRef.current;
+      if (localPreview?.objectUrl) URL.revokeObjectURL(localPreview.objectUrl);
+      localUploadPreviewRef.current = null;
     };
   }, []);
 
@@ -257,7 +382,6 @@ export function WorkspaceProvider({
     loadAbortRef.current = controller;
 
     if (!silent) setIsLoading(true);
-    else setIsRefreshing(true);
 
     try {
       const incomingProject = await loadWorkspace(projectId, controller.signal);
@@ -269,6 +393,8 @@ export function WorkspaceProvider({
       setWorkspaceIssue(null);
       setActiveAssetId((current) => {
         if (current && nextProject.assets.some((asset) => asset.id === current)) return current;
+        const remembered = loadLastActiveAssetId(projectId);
+        if (remembered && nextProject.assets.some((asset) => asset.id === remembered)) return remembered;
         return nextProject.assets[0]?.id ?? null;
       });
 
@@ -295,8 +421,33 @@ export function WorkspaceProvider({
     } finally {
       if (mountedRef.current && sequence === loadSequenceRef.current) {
         setIsLoading(false);
-        setIsRefreshing(false);
       }
+    }
+  }, [projectId]);
+
+  const refreshAssetProcessingStatus = useCallback(async (): Promise<void> => {
+    processingStatusAbortRef.current?.abort();
+    const controller = new AbortController();
+    processingStatusAbortRef.current = controller;
+    const sequence = ++processingStatusSequenceRef.current;
+
+    try {
+      const response = await loadAssetProcessingStatus(projectId, controller.signal);
+      if (!mountedRef.current || controller.signal.aborted || sequence !== processingStatusSequenceRef.current) return;
+      const current = projectRef.current;
+      if (!current) return;
+      const next = applyAssetProcessingSnapshots(current, response.assets);
+      if (next === current) return;
+      projectRef.current = next;
+      setProject(next);
+    } catch (error) {
+      const normalized = normalizeApiError(error);
+      if (normalized.kind === "aborted" || controller.signal.aborted || !mountedRef.current) return;
+      if (normalized.status === 403 || normalized.status === 404) {
+        setWorkspaceIssue(issueFromError(error));
+      }
+    } finally {
+      if (processingStatusAbortRef.current === controller) processingStatusAbortRef.current = null;
     }
   }, [projectId]);
 
@@ -313,12 +464,66 @@ export function WorkspaceProvider({
   }, [currentUserId, refreshWorkspace, sessionStatus]);
 
   useEffect(() => {
+    if (
+      sessionStatus !== "authenticated"
+      || !currentUserId
+      || !hasPendingAssetProcessing
+      || workspaceIssue
+    ) return;
+
+    let cancelled = false;
+    let timer: number | null = null;
+
+    const schedule = (delayMs: number) => {
+      if (cancelled) return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        void poll();
+      }, delayMs);
+    };
+
+    const poll = async () => {
+      if (cancelled) return;
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        await refreshAssetProcessingStatus();
+      }
+      schedule(realtimeStatus === "connected" ? 30_000 : 3_000);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+      void poll();
+    };
+
+    schedule(realtimeStatus === "connected" ? 15_000 : 1_500);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [currentUserId, hasPendingAssetProcessing, realtimeStatus, refreshAssetProcessingStatus, sessionStatus, workspaceIssue]);
+
+  useEffect(() => {
+    layoutModeRef.current = null;
     const desktop = window.matchMedia("(min-width: 1180px)");
     const tablet = window.matchMedia("(min-width: 1024px) and (max-width: 1179px)");
     const apply = () => {
       const nextMode = currentWorkspaceLayoutMode();
       if (layoutModeRef.current === nextMode) return;
       layoutModeRef.current = nextMode;
+      const remembered = loadWorkspaceChromeMemory(projectId, nextMode);
+      skipNextChromePersistRef.current = Boolean(remembered);
+      if (remembered) {
+        sidebarPreferencesRef.current[nextMode] = {
+          asset: remembered.assetSidebarOpen,
+          feedback: remembered.feedbackSidebarOpen,
+        };
+        setRightSidebarTab(remembered.rightSidebarTab);
+      }
       const preference = sidebarPreferencesRef.current[nextMode];
       setIsAssetSidebarOpenState(preference.asset);
       setIsFeedbackSidebarOpenState(preference.feedback);
@@ -330,7 +535,7 @@ export function WorkspaceProvider({
       desktop.removeEventListener("change", apply);
       tablet.removeEventListener("change", apply);
     };
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     const handleOffline = () => {
@@ -368,6 +573,10 @@ export function WorkspaceProvider({
     const scheduleRefresh = (payload: WorkspaceRefreshPayload) => {
       if (realtimeRefreshTimerRef.current) clearTimeout(realtimeRefreshTimerRef.current);
       realtimeRefreshTimerRef.current = setTimeout(() => {
+        if (payload.reason === "asset-processing-settled") {
+          void refreshAssetProcessingStatus();
+          return;
+        }
         void refreshWorkspace(payload.reason || "realtime", true);
       }, 180);
     };
@@ -492,16 +701,54 @@ export function WorkspaceProvider({
       setActiveUsers([]);
       clearRemoteCursors();
     };
-  }, [currentUserId, hasProject, projectId, refreshWorkspace, sessionStatus, workspaceIssue]);
+  }, [currentUserId, hasProject, projectId, refreshAssetProcessingStatus, refreshWorkspace, sessionStatus, workspaceIssue]);
 
 
   useEffect(() => {
+    if (!project || typeof window === "undefined") return;
+    const target = parseFeedbackDeepLink(window.location.search);
+    if (!target.assetId) return;
+    const key = `${target.assetId}:${target.commentId ?? ""}`;
+    if (deepLinkAppliedRef.current === key) return;
+    if (!project.assets.some((asset) => asset.id === target.assetId)) return;
+
+    deepLinkAppliedRef.current = key;
+    setActiveAssetId(target.assetId);
+    setActivePinId(target.commentId);
+    setRightSidebarTab("FEEDBACK");
+    const mode = currentWorkspaceLayoutMode();
+    if (mode === "mobile") {
+      sidebarPreferencesRef.current.mobile = { asset: false, feedback: false };
+      setIsAssetSidebarOpenState(false);
+      setIsFeedbackSidebarOpenState(false);
+    } else {
+      sidebarPreferencesRef.current[mode].feedback = true;
+      setIsFeedbackSidebarOpenState(true);
+    }
+  }, [project]);
+
+  useEffect(() => {
     if (!project) return;
-    if (activeAssetId && project.assets.some((asset) => asset.id === activeAssetId)) return;
-    setActiveAssetId(project.assets[0]?.id ?? null);
+    if (activeAssetId && project.assets.some((asset) => asset.id === activeAssetId)) {
+      saveLastActiveAssetId(projectId, activeAssetId);
+      return;
+    }
+    const remembered = loadLastActiveAssetId(projectId);
+    const nextAssetId = remembered && project.assets.some((asset) => asset.id === remembered)
+      ? remembered
+      : project.assets[0]?.id ?? null;
+    setActiveAssetId(nextAssetId);
+    saveLastActiveAssetId(projectId, nextAssetId);
     setActivePinId(null);
     setIsCompareModeState(false);
-  }, [activeAssetId, project]);
+  }, [activeAssetId, project, projectId]);
+
+  useEffect(() => {
+    const localPreview = localUploadPreviewRef.current;
+    if (!localPreview?.assetId || !project) return;
+    const asset = project.assets.find((candidate) => candidate.id === localPreview.assetId);
+    if (asset?.processingStatus === "REJECTED") clearLocalUploadPreview(localPreview.token);
+  }, [clearLocalUploadPreview, project]);
 
   const emitCursor = useCallback((assetId: string, x: number, y: number) => {
     if (!socket?.connected || !assetId || !Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -546,6 +793,15 @@ export function WorkspaceProvider({
     }
   }, []);
 
+  const persistChromePreference = useCallback((mode: WorkspaceLayoutMode) => {
+    const preference = sidebarPreferencesRef.current[mode];
+    saveWorkspaceChromeMemory(projectId, mode, {
+      assetSidebarOpen: preference.asset,
+      feedbackSidebarOpen: preference.feedback,
+      rightSidebarTab,
+    });
+  }, [projectId, rightSidebarTab]);
+
   const setIsAssetSidebarOpen = useCallback((open: boolean) => {
     const mode = currentWorkspaceLayoutMode();
     const preference = sidebarPreferencesRef.current[mode];
@@ -555,7 +811,8 @@ export function WorkspaceProvider({
       preference.feedback = false;
       setIsFeedbackSidebarOpenState(false);
     }
-  }, []);
+    persistChromePreference(mode);
+  }, [persistChromePreference]);
 
   const setIsFeedbackSidebarOpen = useCallback((open: boolean) => {
     const mode = currentWorkspaceLayoutMode();
@@ -566,7 +823,8 @@ export function WorkspaceProvider({
       preference.asset = false;
       setIsAssetSidebarOpenState(false);
     }
-  }, []);
+    persistChromePreference(mode);
+  }, [persistChromePreference]);
 
   const openAssetSidebar = useCallback(() => setIsAssetSidebarOpen(true), [setIsAssetSidebarOpen]);
   const openFeedbackSidebar = useCallback(() => setIsFeedbackSidebarOpen(true), [setIsFeedbackSidebarOpen]);
@@ -575,15 +833,28 @@ export function WorkspaceProvider({
       sidebarPreferencesRef.current.mobile = { asset: false, feedback: false };
       setIsAssetSidebarOpenState(false);
       setIsFeedbackSidebarOpenState(false);
+      saveWorkspaceChromeMemory(projectId, "mobile", {
+        assetSidebarOpen: false,
+        feedbackSidebarOpen: false,
+        rightSidebarTab,
+      });
     }
-  }, []);
+  }, [projectId, rightSidebarTab]);
+
+  useEffect(() => {
+    if (skipNextChromePersistRef.current) {
+      skipNextChromePersistRef.current = false;
+      return;
+    }
+    const mode = currentWorkspaceLayoutMode();
+    persistChromePreference(mode);
+  }, [persistChromePreference, rightSidebarTab]);
 
   const dataValue = useMemo<WorkspaceDataContextType>(() => ({
     projectId,
     project,
     setProject,
     isLoading,
-    isRefreshing,
     workspaceIssue,
     realtimeStatus,
     realtimeMessage,
@@ -601,9 +872,16 @@ export function WorkspaceProvider({
     assetStacks,
     activeAsset,
     filteredComments,
+    localUploadPreview,
+    beginLocalUploadPreview,
+    bindLocalUploadPreview,
+    clearLocalUploadPreview,
   }), [
     activeAsset,
     activeAssetId,
+    beginLocalUploadPreview,
+    bindLocalUploadPreview,
+    clearLocalUploadPreview,
     activeUsers,
     assetStacks,
     currentUserId,
@@ -614,7 +892,7 @@ export function WorkspaceProvider({
     isLocked,
     isOnline,
     isOwner,
-    isRefreshing,
+    localUploadPreview,
     project,
     projectId,
     realtimeMessage,

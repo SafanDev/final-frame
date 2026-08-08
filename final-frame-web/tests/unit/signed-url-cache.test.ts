@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
   requestSecureAssetUrl: vi.fn(),
@@ -21,6 +21,7 @@ import {
   invalidateCommentAudioUrl,
   peekCachedAssetUrl,
   prefetchAssetUrl,
+  warmAssetPreview,
 } from "@/lib/storage/signed-url-cache";
 
 function deferred<T>() {
@@ -38,6 +39,14 @@ describe("signed URL request sharing", () => {
     clearSignedUrlCaches();
     api.requestSecureAssetUrl.mockReset();
     api.requestCommentAudioUrl.mockReset();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1)),
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("does not let one viewer abort a shared asset URL request", async () => {
@@ -127,6 +136,27 @@ describe("signed URL request sharing", () => {
 
     await expect(request).rejects.toMatchObject({ name: "AbortError" });
     expect(peekCachedAssetUrl("logout-asset")).toBe("");
+  });
+
+
+  it("warms small non-video previews without duplicating the network request", async () => {
+    api.requestSecureAssetUrl.mockResolvedValue({
+      url: "/api/media/assets/asset-warm/preview",
+      expiresInSeconds: 300,
+    });
+
+    warmAssetPreview("asset-warm", "application/pdf", 1_000_000);
+    warmAssetPreview("asset-warm", "application/pdf", 1_000_000);
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/media/assets/asset-warm/preview",
+      expect.objectContaining({ credentials: "include", cache: "force-cache" }),
+    );
+
+    warmAssetPreview("asset-video", "video/mp4", 1_000_000);
+    warmAssetPreview("asset-large", "application/pdf", 7 * 1024 * 1024);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
 });

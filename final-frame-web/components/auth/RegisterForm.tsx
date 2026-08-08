@@ -103,10 +103,6 @@ export default function RegisterForm({ callbackUrl, initialEmail = "" }: Registe
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-      <div className="rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm leading-6 text-zinc-400">
-        New accounts start with Client access.
-      </div>
-
       {submitError ? (
         <InlineAlert tone="error" title="Account could not be created" requestId={submitError.requestId}>
           {getUserFacingErrorMessage(submitError)}

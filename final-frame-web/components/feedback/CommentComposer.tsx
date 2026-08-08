@@ -6,10 +6,12 @@ import VoiceRecorderControl, { type VoiceRecordingValue } from "@/components/fee
 import { createComment } from "@/lib/api/comments";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
 import { uploadVoiceNote, type UploadProgress } from "@/lib/api/uploads";
-import type { ProjectComment } from "@/lib/api/types";
+import type { BasicUser, ProjectComment } from "@/lib/api/types";
 import { resolveFeedbackAnchor } from "@/lib/feedback/anchor-core";
 import { shouldSubmitFeedbackOnKeyDown } from "@/lib/feedback/keyboard";
 import { composeFeedbackText } from "@/lib/feedback/transcript";
+import { clearFeedbackDraft, loadFeedbackDraft, saveFeedbackDraft, type FeedbackDraftKind } from "@/lib/workspace/review-session";
+import { buildOptimisticComment } from "@/lib/workspace/optimistic-feedback";
 
 interface CommentLocation {
   x: number;
@@ -19,6 +21,8 @@ interface CommentLocation {
 interface CommentComposerProps {
   projectId: string;
   assetId: string;
+  currentUserId: string;
+  currentUser?: BasicUser | null;
   location?: CommentLocation | null;
   pageNumber?: number | null;
   lineStart?: number | null;
@@ -27,12 +31,18 @@ interface CommentComposerProps {
   columnEnd?: number | null;
   timestamp?: number | null;
   disabled?: boolean;
+  isOnline?: boolean;
   autoFocus?: boolean;
   title?: string;
   placeholder?: string;
   submitLabel?: string;
   compact?: boolean;
   onCreated: (comment: ProjectComment) => void;
+  onOptimisticCreated?: (comment: ProjectComment) => void;
+  onOptimisticSettled?: (temporaryId: string, comment: ProjectComment) => void;
+  onOptimisticFailed?: (comment: ProjectComment, error: { message: string; requestId: string | null }) => void;
+  onSubmitStart?: () => void;
+  onSubmitError?: () => void;
   onCancel?: () => void;
 }
 
@@ -44,10 +54,11 @@ function formatTimestamp(seconds: number): string {
   return `${minutes}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-
 export default function CommentComposer({
   projectId,
   assetId,
+  currentUserId,
+  currentUser = null,
   location = null,
   pageNumber = null,
   lineStart = null,
@@ -56,54 +67,72 @@ export default function CommentComposer({
   columnEnd = null,
   timestamp = null,
   disabled = false,
+  isOnline = true,
   autoFocus = false,
   title = "Add feedback",
-  placeholder = "Describe the change clearly and include the expected result…",
-  submitLabel = "Post feedback",
+  placeholder = "What should change?",
+  submitLabel = "Post",
   compact = false,
   onCreated,
+  onOptimisticCreated,
+  onOptimisticSettled,
+  onOptimisticFailed,
+  onSubmitStart,
+  onSubmitError,
   onCancel,
 }: CommentComposerProps) {
   const controllerRef = useRef<AbortController | null>(null);
   const voiceResetRef = useRef<() => void>(() => undefined);
   const [text, setText] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [voiceTranscript, setVoiceTranscript] = useState("");
-  const [transcriptionSupported, setTranscriptionSupported] = useState(false);
   const [stage, setStage] = useState<SubmissionStage>("idle");
   const [audioProgress, setAudioProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<{ message: string; requestId: string | null } | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
 
   const handleVoiceChange = useCallback((value: VoiceRecordingValue) => {
     setAudioBlob(value.blob);
-    setVoiceTranscript(value.transcript);
-    setTranscriptionSupported(value.transcriptionSupported);
     voiceResetRef.current = value.reset;
   }, []);
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 
   const isSubmitting = stage !== "idle";
-  const finalText = composeFeedbackText(text, voiceTranscript, Boolean(audioBlob));
+  const finalText = composeFeedbackText(text, "", Boolean(audioBlob));
   const exceedsTextLimit = finalText.length > 5_000;
-  const canSubmit = !disabled && !isSubmitting && !exceedsTextLimit && (finalText.length > 0 || Boolean(audioBlob));
+  const showCharacterCount = finalText.length >= 4_500 || exceedsTextLimit;
+  const canSubmit = isOnline && !disabled && !isSubmitting && !exceedsTextLimit && (finalText.length > 0 || Boolean(audioBlob));
   const hasAnchor = Boolean(location || timestamp !== null || pageNumber !== null || lineStart !== null);
-  const anchorDescription = timestamp !== null
-    ? `Video ${formatTimestamp(timestamp)}`
+  const draftKind: FeedbackDraftKind = hasAnchor ? "pinned" : "general";
+  const anchorLabel = timestamp !== null
+    ? formatTimestamp(timestamp)
     : pageNumber !== null
-      ? `PDF page ${pageNumber}`
+      ? `Page ${pageNumber}`
       : lineStart !== null
-        ? `Source line${lineEnd !== null && lineEnd !== lineStart ? `s ${lineStart}–${lineEnd}` : ` ${lineStart}`}`
-        : location
-          ? "Pinned to file"
-          : "General feedback";
+        ? lineEnd !== null && lineEnd !== lineStart ? `Lines ${lineStart}–${lineEnd}` : `Line ${lineStart}`
+        : null;
+  const shortcutId = `comment-shortcuts-${assetId}-${hasAnchor ? "anchor" : "general"}`;
+
+  useEffect(() => {
+    const restored = loadFeedbackDraft(currentUserId, projectId, assetId, draftKind);
+    setText(restored);
+    setDraftRestored(Boolean(restored.trim()));
+    if (!restored.trim()) return;
+    const timer = window.setTimeout(() => setDraftRestored(false), 2_500);
+    return () => window.clearTimeout(timer);
+  }, [assetId, currentUserId, draftKind, projectId]);
+
+  function clearDraft() {
+    clearFeedbackDraft(currentUserId, projectId, assetId, draftKind);
+    setDraftRestored(false);
+  }
 
   function resetComposer() {
     setText("");
     setAudioBlob(null);
-    setVoiceTranscript("");
     setAudioProgress(null);
     setError(null);
+    clearDraft();
     voiceResetRef.current();
   }
 
@@ -111,6 +140,52 @@ export default function CommentComposer({
     event.preventDefault();
     if (!canSubmit) return;
 
+    const anchor = resolveFeedbackAnchor({
+      location,
+      pageNumber,
+      lineStart,
+      lineEnd,
+      columnStart,
+      columnEnd,
+      timestamp,
+    });
+
+    // Text-only feedback is safe to render immediately. Persist it in the
+    // background so placing one pin never blocks the next review action. Voice
+    // notes still use the blocking path because the audio must be uploaded
+    // securely before the comment can reference it.
+    if (!audioBlob && onOptimisticCreated && onOptimisticSettled && onOptimisticFailed) {
+      const optimistic = buildOptimisticComment({
+        assetId,
+        authorId: currentUserId,
+        author: currentUser ?? { id: currentUserId, name: "You" },
+        text: finalText,
+        anchor,
+      });
+      const draftText = text;
+      setError(null);
+      onOptimisticCreated(optimistic);
+      resetComposer();
+
+      void createComment(projectId, assetId, {
+        text: finalText,
+        ...anchor,
+        audioKey: null,
+      }).then((comment) => {
+        onOptimisticSettled(optimistic.id, comment);
+      }).catch((caught) => {
+        const normalized = normalizeApiError(caught);
+        const failure = {
+          message: getUserFacingErrorMessage(caught, "The feedback could not be saved."),
+          requestId: normalized.requestId,
+        };
+        saveFeedbackDraft(currentUserId, projectId, assetId, draftKind, draftText);
+        onOptimisticFailed(optimistic, failure);
+      });
+      return;
+    }
+
+    onSubmitStart?.();
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -127,15 +202,6 @@ export default function CommentComposer({
       }
 
       setStage("saving-comment");
-      const anchor = resolveFeedbackAnchor({
-        location,
-        pageNumber,
-        lineStart,
-        lineEnd,
-        columnStart,
-        columnEnd,
-        timestamp,
-      });
       const comment = await createComment(projectId, assetId, {
         text: finalText,
         ...anchor,
@@ -151,11 +217,25 @@ export default function CommentComposer({
           message: getUserFacingErrorMessage(caught, "The feedback could not be saved."),
           requestId: normalized.requestId,
         });
+        onSubmitError?.();
       }
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null;
       setStage("idle");
     }
+  }
+
+  function handleTextChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    const next = event.target.value;
+    setText(next);
+    setDraftRestored(false);
+    saveFeedbackDraft(currentUserId, projectId, assetId, draftKind, next);
+  }
+
+  function handleCancel() {
+    if (isSubmitting) return;
+    clearDraft();
+    onCancel?.();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -172,75 +252,67 @@ export default function CommentComposer({
     event.currentTarget.form?.requestSubmit();
   }
 
+  function handleFormKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    if (event.key !== "Escape" || !onCancel || isSubmitting) return;
+    event.preventDefault();
+    handleCancel();
+  }
+
   return (
-    <form onSubmit={handleSubmit} className={`rounded-2xl border border-white/10 bg-[#101113] ${compact ? "p-3" : "p-4"}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <form
+      onSubmit={handleSubmit}
+      onKeyDown={handleFormKeyDown}
+      className={`ff-feedback-composer ${hasAnchor ? "is-pinned" : "is-general"} ${compact ? "is-compact" : ""}`}
+    >
+      <div className="ff-feedback-composer-head">
         <div>
-          <h3 className="text-sm font-bold text-white">{title}</h3>
-          {hasAnchor ? (
-            <p className="mt-1 text-xs leading-5 text-zinc-500">{anchorDescription}</p>
-          ) : null}
+          <h3>{title}</h3>
+          {anchorLabel ? <span>{anchorLabel}</span> : null}
+          {draftRestored ? <span className="ff-feedback-draft-restored">Draft restored</span> : null}
         </div>
-        <span className={`text-xs tabular-nums ${exceedsTextLimit ? "font-bold text-rose-300" : "text-zinc-600"}`}>{finalText.length}/5000</span>
+        {showCharacterCount ? <span className={exceedsTextLimit ? "is-over-limit" : undefined}>{finalText.length}/5000</span> : null}
       </div>
 
       <label htmlFor={`comment-${assetId}-${hasAnchor ? "anchor" : "general"}`} className="sr-only">Feedback text</label>
       <textarea
         id={`comment-${assetId}-${hasAnchor ? "anchor" : "general"}`}
         value={text}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setText(event.target.value)}
+        onChange={handleTextChange}
         onKeyDown={handleKeyDown}
         maxLength={5_000}
-        rows={compact ? 2 : hasAnchor ? 3 : 4}
+        rows={hasAnchor ? 3 : 2}
         autoFocus={autoFocus}
         disabled={disabled || isSubmitting}
         placeholder={placeholder}
-        className="mt-3 w-full resize-y rounded-xl border border-white/10 bg-black/25 px-3 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-zinc-600 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+        aria-describedby={shortcutId}
+        aria-keyshortcuts="Enter Shift+Enter Escape"
+        className="ff-feedback-composer-textarea"
       />
+      <span id={shortcutId} className="sr-only">Press Enter to save feedback, Shift plus Enter for a new line, and Escape to cancel.</span>
 
-      <div className="mt-3">
+      <div className="ff-feedback-composer-voice">
         <VoiceRecorderControl disabled={disabled || isSubmitting} onChange={handleVoiceChange} />
       </div>
 
-      {audioBlob ? (
-        <div className="mt-3">
-          <label htmlFor={`transcript-${assetId}-${hasAnchor ? "anchor" : "general"}`} className="mb-1.5 block text-xs font-bold uppercase tracking-[0.12em] text-zinc-500">
-            Voice transcript{transcriptionSupported ? " · editable" : " · type manually"}
-          </label>
-          <textarea
-            id={`transcript-${assetId}-${hasAnchor ? "anchor" : "general"}`}
-            value={voiceTranscript}
-            onChange={(event) => setVoiceTranscript(event.target.value)}
-            rows={3}
-            maxLength={4_000}
-            placeholder="Add or correct the transcript so the voice note is searchable and accessible."
-            disabled={isSubmitting}
-            className="w-full resize-y rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-sm leading-6 text-zinc-200 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20 disabled:opacity-60"
-          />
-        </div>
-      ) : null}
-
-      {exceedsTextLimit ? <InlineAlert tone="warning" title="Feedback is too long" className="mt-3">Shorten the written note or transcript to stay within 5,000 characters.</InlineAlert> : null}
+      {exceedsTextLimit ? <InlineAlert tone="warning" title="Feedback is too long" className="mt-3">Shorten the note to stay within 5,000 characters.</InlineAlert> : null}
+      {!isOnline && (finalText.length > 0 || Boolean(audioBlob)) ? <p role="status" className="ff-feedback-offline-note">Offline — your text draft is safe. Reconnect to post.</p> : null}
 
       {stage === "uploading-audio" ? (
-        <div role="status" className="mt-3 rounded-xl border border-sky-400/20 bg-sky-500/10 p-3 text-sm text-sky-100">
-          Uploading voice note{audioProgress ? ` · ${audioProgress.percentage}%` : "…"}
-          {audioProgress ? <progress value={audioProgress.percentage} max={100} className="mt-2 block h-1.5 w-full accent-sky-400" aria-label="Voice-note upload progress" /> : null}
+        <div role="status" className="ff-feedback-upload-status">
+          <span>Uploading voice note{audioProgress ? ` · ${audioProgress.percentage}%` : "…"}</span>
+          {audioProgress ? <progress value={audioProgress.percentage} max={100} aria-label="Voice-note upload progress" /> : null}
         </div>
       ) : null}
-      {stage === "saving-comment" ? <p role="status" className="mt-3 text-sm text-zinc-400">Saving feedback…</p> : null}
+      {stage === "saving-comment" ? <span role="status" className="sr-only">Saving feedback…</span> : null}
       {error ? <InlineAlert tone="error" title="Feedback was not saved" requestId={error.requestId} className="mt-3">{error.message}</InlineAlert> : null}
 
-      <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs leading-5 text-zinc-600">{location ? "Enter saves · Shift + Enter adds a line" : "Ctrl or Command + Enter to post"}</p>
-        <div className="flex gap-2 sm:justify-end">
-          {onCancel ? (
-            <button type="button" onClick={onCancel} disabled={isSubmitting} className="min-h-10 flex-1 rounded-lg border border-white/10 px-4 text-sm font-semibold text-zinc-300 hover:bg-white/5 disabled:opacity-50 sm:flex-none">Cancel</button>
-          ) : null}
-          <button type="submit" disabled={!canSubmit} className="min-h-10 flex-1 rounded-lg bg-emerald-400 px-4 text-sm font-bold text-zinc-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-45 sm:flex-none">
-            {isSubmitting ? "Saving…" : submitLabel}
-          </button>
-        </div>
+      <div className="ff-feedback-composer-actions">
+        {onCancel ? (
+          <button type="button" onClick={handleCancel} disabled={isSubmitting} aria-keyshortcuts="Escape" title="Cancel (Esc)" className="ff-feedback-composer-cancel">Cancel</button>
+        ) : null}
+        <button type="submit" disabled={!canSubmit} aria-keyshortcuts="Enter" title={isOnline ? `${submitLabel} (Enter)` : "Reconnect to post"} className="ff-feedback-composer-submit">
+          {isSubmitting ? "Saving…" : submitLabel}
+        </button>
       </div>
     </form>
   );

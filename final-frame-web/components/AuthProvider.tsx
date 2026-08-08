@@ -1,14 +1,22 @@
 "use client";
 
+import type { Session } from "next-auth";
 import { SessionProvider } from "next-auth/react";
-import SessionExpiryListener from "@/components/auth/SessionExpiryListener";
-import { UserPreferencesProvider } from "@/contexts/UserPreferencesContext";
 
-export default function AuthProvider({ children }: { children: React.ReactNode }) {
+export default function AuthProvider({
+  children,
+  session,
+}: {
+  children: React.ReactNode;
+  session?: Session | null;
+}) {
   return (
-    <SessionProvider refetchOnWindowFocus refetchWhenOffline={false}>
-      <SessionExpiryListener />
-      <UserPreferencesProvider>{children}</UserPreferencesProvider>
+    <SessionProvider
+      session={session}
+      refetchOnWindowFocus
+      refetchWhenOffline={false}
+    >
+      {children}
     </SessionProvider>
   );
 }

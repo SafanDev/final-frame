@@ -3,6 +3,8 @@ import { requestCommentAudioUrl } from "@/lib/api/comments";
 import type { SecureAssetPurpose } from "@/lib/api/types";
 
 const EXPIRY_SAFETY_WINDOW_MS = 30_000;
+const PREVIEW_WARM_MAX_BYTES = 6 * 1024 * 1024;
+const PREVIEW_WARM_TTL_MS = 25_000;
 
 interface CachedUrl {
   url: string;
@@ -13,6 +15,8 @@ const assetCache = new Map<string, CachedUrl>();
 const audioCache = new Map<string, CachedUrl>();
 const inFlightAssetRequests = new Map<string, Promise<string>>();
 const inFlightAudioRequests = new Map<string, Promise<string>>();
+const inFlightPreviewWarmups = new Map<string, Promise<void>>();
+const warmedPreviewAt = new Map<string, number>();
 const assetInvalidationVersions = new Map<string, number>();
 const audioInvalidationVersions = new Map<string, number>();
 let cacheGeneration = 0;
@@ -123,6 +127,34 @@ export function prefetchAssetUrl(
   void getCachedAssetUrl(assetId, purpose).catch(() => undefined);
 }
 
+export function warmAssetPreview(
+  assetId: string,
+  mimeType: string | null | undefined,
+  fileSize: number | null | undefined,
+): void {
+  if (!assetId || mimeType?.startsWith("video/") || !fileSize || fileSize > PREVIEW_WARM_MAX_BYTES) return;
+  const key = assetKey(assetId, "preview");
+  const warmedAt = warmedPreviewAt.get(key) ?? 0;
+  if (Date.now() - warmedAt < PREVIEW_WARM_TTL_MS || inFlightPreviewWarmups.has(key)) return;
+
+  const warmup = getCachedAssetUrl(assetId, "preview")
+    .then(async (url) => {
+      const response = await fetch(url, {
+        credentials: "include",
+        cache: "force-cache",
+      });
+      if (!response.ok) return;
+      await response.arrayBuffer();
+      warmedPreviewAt.set(key, Date.now());
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      if (inFlightPreviewWarmups.get(key) === warmup) inFlightPreviewWarmups.delete(key);
+    });
+
+  inFlightPreviewWarmups.set(key, warmup);
+}
+
 export function invalidateAssetUrl(
   assetId: string,
   purpose?: SecureAssetPurpose,
@@ -130,11 +162,17 @@ export function invalidateAssetUrl(
   if (purpose) {
     const key = assetKey(assetId, purpose);
     invalidateKey(assetCache, inFlightAssetRequests, assetInvalidationVersions, key);
+    if (purpose === "preview") {
+      warmedPreviewAt.delete(key);
+      inFlightPreviewWarmups.delete(key);
+    }
     return;
   }
 
   for (const key of [assetKey(assetId, "preview"), assetKey(assetId, "download")]) {
     invalidateKey(assetCache, inFlightAssetRequests, assetInvalidationVersions, key);
+    warmedPreviewAt.delete(key);
+    inFlightPreviewWarmups.delete(key);
   }
 }
 
@@ -190,6 +228,8 @@ export function clearSignedUrlCaches(): void {
   audioCache.clear();
   inFlightAssetRequests.clear();
   inFlightAudioRequests.clear();
+  inFlightPreviewWarmups.clear();
+  warmedPreviewAt.clear();
   assetInvalidationVersions.clear();
   audioInvalidationVersions.clear();
 }

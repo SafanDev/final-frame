@@ -6,7 +6,7 @@ import InlineAlert from "@/components/ui/InlineAlert";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
 import { renameAssetStack } from "@/lib/api/assets";
 import { normalizeAssetFileName } from "@/lib/assets/file-policy";
-import type { ProjectAsset } from "@/lib/api/types";
+import type { AssetRenameResponse, ProjectAsset } from "@/lib/api/types";
 
 interface AssetRenameDialogProps {
   open: boolean;
@@ -14,7 +14,7 @@ interface AssetRenameDialogProps {
   asset: ProjectAsset | null;
   expectedVersion: number;
   onClose: () => void;
-  onRenamed: (fileName: string) => Promise<void> | void;
+  onRenamed: (result: AssetRenameResponse, asset: ProjectAsset) => Promise<void> | void;
 }
 
 export default function AssetRenameDialog({ open, projectId, asset, expectedVersion, onClose, onRenamed }: AssetRenameDialogProps) {
@@ -49,7 +49,7 @@ export default function AssetRenameDialog({ open, projectId, asset, expectedVers
     setError(null);
     try {
       const result = await renameAssetStack(projectId, asset.id, normalized, expectedVersion);
-      await onRenamed(result.fileName);
+      await onRenamed(result, asset);
       onClose();
     } catch (caught) {
       const normalizedError = normalizeApiError(caught);

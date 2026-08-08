@@ -147,6 +147,28 @@ export async function requireStorageCapacity(
   }
 }
 
+export async function consumeStorageCapacity(
+  transaction: Prisma.TransactionClient,
+  ownerId: string,
+  additionalBytes: number | bigint,
+): Promise<void> {
+  await lockGlobalQuota(transaction);
+  const account = await lockAccount(transaction, ownerId);
+  const bytes = BigInt(additionalBytes);
+  if (exceedsByteLimit(account.storageUsedBytes, 0n, bytes, BigInt(env.FREE_MAX_STORAGE_BYTES))) {
+    throw quotaError('This account does not have enough storage for this file.');
+  }
+  const usedGlobally = await globalStorageUsed(transaction);
+  if (exceedsByteLimit(usedGlobally, 0n, bytes, BigInt(env.GLOBAL_MAX_STORAGE_BYTES))) {
+    throw quotaError('The service storage limit has been reached. Remove files before uploading more.', 'SERVICE_STORAGE_LIMIT_REACHED');
+  }
+  await transaction.user.update({
+    where: { id: ownerId },
+    data: { storageUsedBytes: { increment: bytes } },
+    select: { id: true },
+  });
+}
+
 export async function addStorageUsage(
   transaction: Prisma.TransactionClient,
   ownerId: string,

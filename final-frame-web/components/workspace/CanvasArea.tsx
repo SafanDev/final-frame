@@ -7,23 +7,34 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type ChangeEvent,
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
-  type WheelEvent,
 } from "react";
 import { toast } from "sonner";
 import CommentComposer from "@/components/feedback/CommentComposer";
+import Button from "@/components/ui/Button";
 import ImageCompareViewer from "@/components/viewers/ImageCompareViewer";
 import AssetViewer from "@/components/viewers/AssetViewer";
+import CanvasShortcuts from "@/components/workspace/CanvasShortcuts";
+import LocalUploadPreview from "@/components/workspace/LocalUploadPreview";
+import CanvasToolbar from "@/components/workspace/CanvasToolbar";
 import PinPopover from "@/components/workspace/PinPopover";
 import RemoteCursorLayer from "@/components/workspace/RemoteCursorLayer";
 import SelectMenu from "@/components/ui/SelectMenu";
 import { useWorkspaceData, useWorkspaceUI } from "@/contexts/WorkspaceContext";
 import { useSecureAssetUrl } from "@/hooks/useSecureAssetUrl";
 import { getAssetCategory } from "@/lib/assets/file-policy";
-import { upsertWorkspaceComment } from "@/lib/workspace/state";
+import { removeWorkspaceComment, replaceWorkspaceComment, upsertWorkspaceComment } from "@/lib/workspace/state";
+import {
+  clearPendingFeedbackAnchor,
+  loadPendingFeedbackAnchor,
+  loadReviewViewState,
+  savePendingFeedbackAnchor,
+  saveReviewViewState,
+  type PendingFeedbackAnchorMemory,
+  type ReviewViewState,
+} from "@/lib/workspace/review-session";
 import {
   calculateFitScale,
   normalizePointToRect,
@@ -71,8 +82,13 @@ export default function CanvasArea() {
     setActiveAssetId,
     assetStacks,
     filteredComments,
+    isOwner,
     isLocked,
+    currentUserId,
+    isOnline,
     emitCursor,
+    localUploadPreview,
+    clearLocalUploadPreview,
   } = useWorkspaceData();
   const {
     activePinId,
@@ -105,8 +121,10 @@ export default function CanvasArea() {
   const positionRef = useRef<Point>({ x: 0, y: 0 });
   const scaleRef = useRef(1);
   const fitPendingRef = useRef(false);
+  const restoreViewPendingRef = useRef<ReviewViewState | null>(null);
   const resumeVideoAfterPinRef = useRef(false);
   const videoWasPlayingBeforePointerRef = useRef(false);
+  const currentVideoTimeRef = useRef(0);
 
   const [scale, setScale] = useState(1);
   const [zoomInput, setZoomInput] = useState("100");
@@ -118,6 +136,7 @@ export default function CanvasArea() {
   const [pendingPageNumber, setPendingPageNumber] = useState<number | null>(null);
   const [pendingLineRange, setPendingLineRange] = useState<{ start: number; end: number } | null>(null);
   const [pendingTimestamp, setPendingTimestamp] = useState<number | null>(null);
+  const [isPinSubmissionInFlight, setIsPinSubmissionInFlight] = useState(false);
   const [surfaceRevision, setSurfaceRevision] = useState(0);
   const [commentMarkerPositions, setCommentMarkerPositions] = useState<Record<string, Point>>({});
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
@@ -126,16 +145,47 @@ export default function CanvasArea() {
   const previewReady = activeAsset?.processingStatus === "CLEAN";
   const securePreview = useSecureAssetUrl(previewReady ? activeAsset?.id : null);
   const category = activeAsset ? getAssetCategory(activeAsset) : "other";
+  const localPreviewCategory = localUploadPreview ? getAssetCategory(localUploadPreview) : "other";
+  const showLocalUploadPreview = Boolean(
+    localUploadPreview
+    && (localUploadPreview.assetId === null || localUploadPreview.assetId === activeAssetId)
+    && activeAsset?.processingStatus !== "REJECTED"
+    && !(previewReady && securePreview.url),
+  );
   const supportsPins = previewReady && (category === "image" || category === "video" || category === "document" || category === "code");
   const usesScrollableDocument = category === "document" || category === "code";
   const activeStack = useMemo(() => activeAsset
     ? [...(assetStacks[activeAsset.stackKey] ?? [])].filter((asset) => asset.processingStatus === "CLEAN").sort((left, right) => right.version - left.version)
     : [], [activeAsset, assetStacks]);
+  const reviewAssetSequence = useMemo(() => Object.values(assetStacks)
+    .filter((stack) => stack.length > 0)
+    .map((stack) => [...stack].sort((left, right) => right.version - left.version)[0])
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)), [assetStacks]);
   const canCompare = category === "image" && activeStack.length > 1;
   const activeComment = useMemo(
     () => activeAsset?.comments.find((comment) => comment.id === activePinId) ?? null,
     [activeAsset, activePinId],
   );
+  const currentUser = useMemo(() => {
+    if (!project || !currentUserId) return null;
+    if (project.ownerId === currentUserId) return project.owner;
+    return project.members.find((member) => member.userId === currentUserId)?.user ?? null;
+  }, [currentUserId, project]);
+  const nextPinnedCommentNumber = useMemo(
+    () => filteredComments.filter((comment) => comment.xPos !== null && comment.yPos !== null).length + 1,
+    [filteredComments],
+  );
+
+  useEffect(() => {
+    if (!localUploadPreview?.assetId || !activeAsset || activeAsset.id !== localUploadPreview.assetId) return;
+    if (activeAsset.processingStatus === "REJECTED") {
+      clearLocalUploadPreview(localUploadPreview.token);
+      return;
+    }
+    if (activeAsset.processingStatus === "CLEAN" && securePreview.url) {
+      clearLocalUploadPreview(localUploadPreview.token);
+    }
+  }, [activeAsset, clearLocalUploadPreview, localUploadPreview, securePreview.url]);
 
   const compareBase = useMemo(() => {
     if (!canCompare) return null;
@@ -194,14 +244,21 @@ export default function CanvasArea() {
     void videoRef.current.play().catch(() => undefined);
   }, []);
 
+  const rememberPendingAnchor = useCallback((memory: PendingFeedbackAnchorMemory) => {
+    if (!activeAssetId) return;
+    savePendingFeedbackAnchor(projectId, activeAssetId, memory);
+  }, [activeAssetId, projectId]);
+
   const cancelPendingPin = useCallback(() => {
+    setIsPinSubmissionInFlight(false);
     setPendingPin(null);
     setPendingApiLocation(null);
     setPendingPageNumber(null);
     setPendingLineRange(null);
     setPendingTimestamp(null);
+    if (activeAssetId) clearPendingFeedbackAnchor(projectId, activeAssetId);
     resumeVideoIfNeeded();
-  }, [resumeVideoIfNeeded]);
+  }, [activeAssetId, projectId, resumeVideoIfNeeded]);
 
   const pdfPointToSurface = useCallback((pageNumber: number, point: Point): Point | null => {
     const surface = surfaceRef.current;
@@ -254,19 +311,77 @@ export default function CanvasArea() {
     if (pendingPageNumber !== null) {
       setPendingApiLocation((current) => {
         const next = move(current);
-        if (next) setPendingPin(pdfPointToSurface(pendingPageNumber, next));
+        if (next) {
+          const surfacePoint = pdfPointToSurface(pendingPageNumber, next);
+          setPendingPin(surfacePoint);
+          rememberPendingAnchor({
+            surfacePoint,
+            apiLocation: next,
+            pageNumber: pendingPageNumber,
+            lineStart: pendingLineRange?.start ?? null,
+            lineEnd: pendingLineRange?.end ?? null,
+            timestamp: pendingTimestamp,
+          });
+        }
         return next;
       });
       return;
     }
 
-    setPendingPin(move);
-    setPendingApiLocation(move);
-  }, [pdfPointToSurface, pendingPageNumber]);
+    setPendingPin((current) => {
+      const next = move(current);
+      setPendingApiLocation(next);
+      if (next) {
+        rememberPendingAnchor({
+          surfacePoint: next,
+          apiLocation: next,
+          pageNumber: null,
+          lineStart: pendingLineRange?.start ?? null,
+          lineEnd: pendingLineRange?.end ?? null,
+          timestamp: pendingTimestamp,
+        });
+      }
+      return next;
+    });
+  }, [pdfPointToSurface, pendingLineRange, pendingPageNumber, pendingTimestamp, rememberPendingAnchor]);
 
   useEffect(() => {
     positionRef.current = position;
   }, [position]);
+
+  useEffect(() => {
+    currentVideoTimeRef.current = currentVideoTime;
+  }, [currentVideoTime]);
+
+  useEffect(() => {
+    if (!activeAssetId) return;
+    const rememberedAssetId = activeAssetId;
+    const stage = stageRef.current;
+    const video = videoRef.current;
+    return () => {
+      saveReviewViewState(projectId, rememberedAssetId, {
+        scale: scaleRef.current,
+        positionX: positionRef.current.x,
+        positionY: positionRef.current.y,
+        scrollLeft: stage?.scrollLeft ?? 0,
+        scrollTop: stage?.scrollTop ?? 0,
+        videoTime: video?.currentTime ?? currentVideoTimeRef.current,
+      });
+    };
+  }, [activeAssetId, projectId]);
+
+  useEffect(() => {
+    if (!activePinId) return;
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const selectionRoot = target.closest<HTMLElement>("[data-feedback-selection]");
+      if (selectionRoot?.dataset.feedbackSelection === activePinId) return;
+      setActivePinId(null);
+    };
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
+  }, [activePinId, setActivePinId]);
 
   useEffect(() => {
     if (!project?.assets.length || !activeAssetId) return;
@@ -282,22 +397,38 @@ export default function CanvasArea() {
   }, [activeAssetId, project?.assets]);
 
   useEffect(() => {
-    fitPendingRef.current = true;
-    scaleRef.current = 1;
-    positionRef.current = { x: 0, y: 0 };
-    setScale(1);
-    setZoomInput("100");
-    setPosition({ x: 0, y: 0 });
-    stageRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    setPendingPin(null);
-    setPendingApiLocation(null);
-    setPendingPageNumber(null);
-    setPendingLineRange(null);
-    setPendingTimestamp(null);
+    const rememberedView = activeAssetId ? loadReviewViewState(projectId, activeAssetId) : null;
+    restoreViewPendingRef.current = rememberedView;
+    fitPendingRef.current = !rememberedView;
+
+    if (rememberedView) {
+      updateScale(rememberedView.scale);
+      const rememberedPosition = { x: rememberedView.positionX, y: rememberedView.positionY };
+      positionRef.current = rememberedPosition;
+      setPosition(rememberedPosition);
+      setCurrentVideoTime(rememberedView.videoTime);
+    } else {
+      scaleRef.current = 1;
+      positionRef.current = { x: 0, y: 0 };
+      setScale(1);
+      setZoomInput("100");
+      setPosition({ x: 0, y: 0 });
+      setCurrentVideoTime(0);
+    }
+
+    const rememberedAnchor = activeAssetId && !isLocked ? loadPendingFeedbackAnchor(projectId, activeAssetId) : null;
+    if (activeAssetId && isLocked) clearPendingFeedbackAnchor(projectId, activeAssetId);
+    setPendingPin(rememberedAnchor?.surfacePoint ?? null);
+    setPendingApiLocation(rememberedAnchor?.apiLocation ?? null);
+    setPendingPageNumber(rememberedAnchor?.pageNumber ?? null);
+    setPendingLineRange(rememberedAnchor?.lineStart !== null && rememberedAnchor?.lineStart !== undefined
+      ? { start: rememberedAnchor.lineStart, end: rememberedAnchor.lineEnd ?? rememberedAnchor.lineStart }
+      : null);
+    setPendingTimestamp(rememberedAnchor?.timestamp ?? null);
+    setIsPinSubmissionInFlight(false);
     setActivePinId(null);
-    setCurrentVideoTime(0);
     resumeVideoAfterPinRef.current = false;
-  }, [activeAssetId, setActivePinId]);
+  }, [activeAssetId, isLocked, projectId, setActivePinId, updateScale]);
 
   useEffect(() => {
     if (!activeAssetId) return;
@@ -306,12 +437,24 @@ export default function CanvasArea() {
     if (!stage || !surface || typeof ResizeObserver === "undefined") return;
 
     const attemptFit = () => {
-      if (!fitPendingRef.current) return;
       const image = surface.querySelector("img");
       const video = surface.querySelector("video");
       if (image && !image.complete) return;
       if (video && video.readyState < 1) return;
       if (!image && !video && surface.querySelector('[role="status"]')) return;
+
+      const rememberedView = restoreViewPendingRef.current;
+      if (rememberedView) {
+        stage.scrollTo({ top: rememberedView.scrollTop, left: rememberedView.scrollLeft, behavior: "auto" });
+        if (video instanceof HTMLVideoElement && rememberedView.videoTime > 0) {
+          video.currentTime = Math.min(rememberedView.videoTime, Number.isFinite(video.duration) ? video.duration : rememberedView.videoTime);
+        }
+        restoreViewPendingRef.current = null;
+        fitPendingRef.current = false;
+        return;
+      }
+
+      if (!fitPendingRef.current) return;
       if (fitView("auto")) fitPendingRef.current = false;
     };
 
@@ -359,7 +502,32 @@ export default function CanvasArea() {
   }, [compareBase, compareBaseAssetId, compareTarget, compareTargetAssetId, isCompareMode, setCompareBaseAssetId, setCompareTargetAssetId]);
 
   useEffect(() => {
-    if (!activeComment || activeComment.xPos === null || activeComment.yPos === null) return;
+    if (!activeComment) return;
+
+    if (activeComment.anchorType === "CODE_RANGE" && activeComment.lineStart !== null) {
+      const lineNumber = activeComment.lineStart;
+      const frame = window.requestAnimationFrame(() => {
+        const surface = surfaceRef.current;
+        if (!surface) return;
+        const virtualViewport = surface.querySelector<HTMLElement>("[data-code-virtual-viewport='true']");
+        if (virtualViewport) {
+          virtualViewport.scrollTo({
+            top: Math.max(0, (lineNumber - 1) * 22 - virtualViewport.clientHeight * 0.35),
+            behavior: "smooth",
+          });
+          window.requestAnimationFrame(() => {
+            surface.querySelector<HTMLElement>(`[data-code-line="${lineNumber}"]`)
+              ?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+          });
+          return;
+        }
+        surface.querySelector<HTMLElement>(`[data-code-line="${lineNumber}"]`)
+          ?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    if (activeComment.xPos === null || activeComment.yPos === null) return;
     if (activeComment.timestamp !== null && videoRef.current) {
       videoRef.current.currentTime = activeComment.timestamp;
       videoRef.current.pause();
@@ -552,25 +720,52 @@ export default function CanvasArea() {
     setIsPanning(false);
   }
 
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
-    if (isCompareMode) return;
-    if (event.ctrlKey || event.metaKey || event.shiftKey) {
-      event.preventDefault();
-      updateScale(scale - event.deltaY * 0.002);
-      return;
-    }
-    if (!usesScrollableDocument) {
-      event.preventDefault();
-      setPosition((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
-    }
-  }
 
-  function changeAsset(direction: -1 | 1) {
-    if (!project?.assets.length || !activeAssetId) return;
-    const index = project.assets.findIndex((asset) => asset.id === activeAssetId);
-    const next = project.assets[index + direction];
-    if (next) setActiveAssetId(next.id);
-  }
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const handleWheel = (event: globalThis.WheelEvent) => {
+      if (isCompareMode) return;
+      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        event.preventDefault();
+        updateScale(scaleRef.current - event.deltaY * 0.002);
+        return;
+      }
+      if (!usesScrollableDocument) {
+        event.preventDefault();
+        setPosition((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
+      }
+    };
+
+    stage.addEventListener("wheel", handleWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", handleWheel);
+  }, [isCompareMode, updateScale, usesScrollableDocument]);
+
+  const changeAsset = useCallback((direction: -1 | 1) => {
+    if (!activeAsset || reviewAssetSequence.length < 2) return;
+    const index = reviewAssetSequence.findIndex((asset) => asset.stackKey === activeAsset.stackKey);
+    if (index < 0) return;
+    const next = reviewAssetSequence[index + direction];
+    if (!next) return;
+    setActivePinId(null);
+    setIsCompareMode(false);
+    setActiveAssetId(next.id);
+  }, [activeAsset, reviewAssetSequence, setActiveAssetId, setActivePinId, setIsCompareMode]);
+
+  useEffect(() => {
+    const handleFileShortcut = (event: globalThis.KeyboardEvent) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (pendingPin || isPinSubmissionInFlight) return;
+      event.preventDefault();
+      event.stopPropagation();
+      changeAsset(event.key === "ArrowRight" ? 1 : -1);
+    };
+    window.addEventListener("keydown", handleFileShortcut, true);
+    return () => window.removeEventListener("keydown", handleFileShortcut, true);
+  }, [changeAsset, isPinSubmissionInFlight, pendingPin]);
 
   function handleStageKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget) return;
@@ -578,16 +773,6 @@ export default function CanvasArea() {
       cancelPendingPin();
       setActivePinId(null);
       if (isCompareMode) setIsCompareMode(false);
-      return;
-    }
-    if (event.altKey && event.key === "ArrowLeft") {
-      event.preventDefault();
-      changeAsset(-1);
-      return;
-    }
-    if (event.altKey && event.key === "ArrowRight") {
-      event.preventDefault();
-      changeAsset(1);
       return;
     }
     if (event.key === "+" || event.key === "=") {
@@ -606,28 +791,28 @@ export default function CanvasArea() {
       fitView();
       return;
     }
-    if (event.key.toLowerCase() === "p" && supportsPins && !isLocked) {
+    if (event.key.toLowerCase() === "p" && supportsPins && !isLocked && !isPinSubmissionInFlight) {
       event.preventDefault();
       setPendingPageNumber(null);
       setPendingLineRange(null);
-      if (category === "code") {
-        setPendingPin(null);
-        setPendingApiLocation(null);
-        setPendingLineRange({ start: 1, end: 1 });
-        setPendingTimestamp(null);
-      } else if (category === "document") {
+      if (category === "document") {
         const firstPage = surfaceRef.current?.querySelector<HTMLElement>("[data-pdf-page]");
         const pageNumber = Number(firstPage?.dataset.pdfPage ?? "1");
         const resolvedPageNumber = Number.isInteger(pageNumber) && pageNumber > 0 ? pageNumber : 1;
         const pagePoint = { x: 50, y: 50 };
-        setPendingPin(pdfPointToSurface(resolvedPageNumber, pagePoint) ?? pagePoint);
+        const surfacePoint = pdfPointToSurface(resolvedPageNumber, pagePoint) ?? pagePoint;
+        setPendingPin(surfacePoint);
         setPendingApiLocation(pagePoint);
         setPendingPageNumber(resolvedPageNumber);
         setPendingTimestamp(null);
+        rememberPendingAnchor({ surfacePoint, apiLocation: pagePoint, pageNumber: resolvedPageNumber, lineStart: null, lineEnd: null, timestamp: null });
       } else {
-        setPendingPin({ x: 50, y: 50 });
-        setPendingApiLocation({ x: 50, y: 50 });
-        setPendingTimestamp(category === "video" ? currentVideoTime : null);
+        const point = { x: 50, y: 50 };
+        const timestamp = category === "video" ? currentVideoTime : null;
+        setPendingPin(point);
+        setPendingApiLocation(point);
+        setPendingTimestamp(timestamp);
+        rememberPendingAnchor({ surfacePoint: point, apiLocation: point, pageNumber: null, lineStart: null, lineEnd: null, timestamp });
       }
       openFeedbackSidebar();
       return;
@@ -656,37 +841,14 @@ export default function CanvasArea() {
   }
 
   function handleSurfaceClick(event: MouseEvent<HTMLDivElement>) {
-    if (!supportsPins || isLocked || isCompareMode || movedRef.current || isSpacePressed || isInteractiveTarget(event.target)) return;
+    if (isPinSubmissionInFlight || !supportsPins || isLocked || isCompareMode || movedRef.current || isSpacePressed || isInteractiveTarget(event.target)) return;
 
     const surfaceRect = event.currentTarget.getBoundingClientRect();
     if (surfaceRect.width <= 0 || surfaceRect.height <= 0) return;
     const selection = window.getSelection();
 
-    if (category === "code") {
-      let startLine: number | null = null;
-      let endLine: number | null = null;
-      if (selection && !selection.isCollapsed && selection.toString().trim()) {
-        const startElement = closestDataElement(selection.anchorNode, "[data-code-line]");
-        const endElement = closestDataElement(selection.focusNode, "[data-code-line]");
-        const first = Number(startElement?.dataset.codeLine);
-        const last = Number(endElement?.dataset.codeLine);
-        if (Number.isInteger(first) && first > 0 && Number.isInteger(last) && last > 0) {
-          startLine = Math.min(first, last);
-          endLine = Math.max(first, last);
-        }
-      } else {
-        const lineElement = closestDataElement(event.target as Node, "[data-code-line]");
-        const line = Number(lineElement?.dataset.codeLine);
-        if (Number.isInteger(line) && line > 0) startLine = endLine = line;
-      }
-      if (startLine === null || endLine === null) return;
+    if (activePinId) {
       setActivePinId(null);
-      setPendingPin(null);
-      setPendingApiLocation(null);
-      setPendingPageNumber(null);
-      setPendingLineRange({ start: startLine, end: endLine });
-      setPendingTimestamp(null);
-      openFeedbackSidebar();
       return;
     }
 
@@ -699,21 +861,25 @@ export default function CanvasArea() {
       const pageRect = page.getBoundingClientRect();
       if (pageRect.width <= 0 || pageRect.height <= 0) return;
       setActivePinId(null);
-      setPendingPin({
+      const surfacePoint = {
         x: clamp(((event.clientX - surfaceRect.left) / surfaceRect.width) * 100, 0, 100),
         y: clamp(((event.clientY - surfaceRect.top) / surfaceRect.height) * 100, 0, 100),
-      });
-      setPendingApiLocation({
+      };
+      const pagePoint = {
         x: clamp(((event.clientX - pageRect.left) / pageRect.width) * 100, 0, 100),
         y: clamp(((event.clientY - pageRect.top) / pageRect.height) * 100, 0, 100),
-      });
+      };
+      setPendingPin(surfacePoint);
+      setPendingApiLocation(pagePoint);
       setPendingPageNumber(pageNumber);
       setPendingLineRange(null);
       setPendingTimestamp(null);
+      rememberPendingAnchor({ surfacePoint, apiLocation: pagePoint, pageNumber, lineStart: null, lineEnd: null, timestamp: null });
       openFeedbackSidebar();
       return;
     }
 
+    let timestamp: number | null = null;
     if (category === "video" && videoRef.current) {
       const videoRect = videoRef.current.getBoundingClientRect();
       if (event.clientY >= videoRect.bottom - 54) return;
@@ -721,7 +887,8 @@ export default function CanvasArea() {
       resumeVideoAfterPinRef.current = videoWasPlayingBeforePointerRef.current;
       videoWasPlayingBeforePointerRef.current = false;
       videoRef.current.pause();
-      setPendingTimestamp(videoRef.current.currentTime);
+      timestamp = videoRef.current.currentTime;
+      setPendingTimestamp(timestamp);
     } else {
       setPendingTimestamp(null);
     }
@@ -735,20 +902,79 @@ export default function CanvasArea() {
     setPendingApiLocation(point);
     setPendingPageNumber(null);
     setPendingLineRange(null);
+    rememberPendingAnchor({ surfacePoint: point, apiLocation: point, pageNumber: null, lineStart: null, lineEnd: null, timestamp });
     openFeedbackSidebar();
   }
 
-  function handleCreated(comment: ProjectComment) {
-    setProject((current) => current ? upsertWorkspaceComment(current, comment.assetId, comment) : current);
-    setActivePinId(comment.id);
+  function clearAcceptedPendingAnchor(assetId: string) {
+    setActivePinId(null);
     setPendingPin(null);
     setPendingApiLocation(null);
     setPendingPageNumber(null);
     setPendingLineRange(null);
     setPendingTimestamp(null);
+    clearPendingFeedbackAnchor(projectId, assetId);
+    setIsPinSubmissionInFlight(false);
+    resumeVideoIfNeeded();
+  }
+
+  function handlePinSubmitStart() {
+    // Only voice-note feedback reaches this blocking path. Text feedback is
+    // inserted locally and persists in the background.
+    setIsPinSubmissionInFlight(true);
+    resumeVideoIfNeeded();
+  }
+
+  function handlePinSubmitError() {
+    setIsPinSubmissionInFlight(false);
+  }
+
+  function handleCreated(comment: ProjectComment) {
+    setProject((current) => current ? upsertWorkspaceComment(current, comment.assetId, comment) : current);
+    clearAcceptedPendingAnchor(comment.assetId);
     openFeedbackSidebar();
-    resumeVideoAfterPinRef.current = false;
     toast.success("Feedback pinned.");
+  }
+
+  function handleOptimisticCreated(comment: ProjectComment) {
+    setProject((current) => current ? upsertWorkspaceComment(current, comment.assetId, comment) : current);
+    clearAcceptedPendingAnchor(comment.assetId);
+    openFeedbackSidebar();
+  }
+
+  function handleOptimisticSettled(temporaryId: string, comment: ProjectComment) {
+    setProject((current) => current ? replaceWorkspaceComment(current, comment.assetId, temporaryId, comment) : current);
+  }
+
+  function handleOptimisticFailed(comment: ProjectComment, failure: { message: string; requestId: string | null }) {
+    setProject((current) => current ? removeWorkspaceComment(current, comment.assetId, comment.id) : current);
+
+    const apiLocation = comment.xPos !== null && comment.yPos !== null ? { x: comment.xPos, y: comment.yPos } : null;
+    const surfacePoint = comment.pageNumber !== null && apiLocation
+      ? pdfPointToSurface(comment.pageNumber, apiLocation) ?? apiLocation
+      : apiLocation;
+    const memory: PendingFeedbackAnchorMemory = {
+      surfacePoint,
+      apiLocation,
+      pageNumber: comment.pageNumber,
+      lineStart: comment.lineStart,
+      lineEnd: comment.lineEnd,
+      timestamp: comment.timestamp,
+    };
+    savePendingFeedbackAnchor(projectId, comment.assetId, memory);
+
+    if (activeAssetId === comment.assetId) {
+      setPendingPin(surfacePoint);
+      setPendingApiLocation(apiLocation);
+      setPendingPageNumber(comment.pageNumber);
+      setPendingLineRange(comment.lineStart !== null ? { start: comment.lineStart, end: comment.lineEnd ?? comment.lineStart } : null);
+      setPendingTimestamp(comment.timestamp);
+      openFeedbackSidebar();
+    }
+
+    toast.error(failure.message, {
+      description: failure.requestId ? `Support reference: ${failure.requestId}` : "Your draft was restored.",
+    });
   }
 
   function commitZoomInput() {
@@ -762,13 +988,32 @@ export default function CanvasArea() {
 
   if (!project) return null;
 
+  if (showLocalUploadPreview && localUploadPreview) {
+    const localIsScrollable = localPreviewCategory === "document" || localPreviewCategory === "code";
+    return (
+      <section className="ff-workspace-canvas relative flex min-w-0 flex-1 overflow-hidden" aria-label={`Local preview of ${localUploadPreview.fileName}`}>
+        <div className="ff-workspace-local-preview-state" role="status" aria-live="polite">
+          <span className="ff-workspace-local-preview-dot" aria-hidden="true" />
+          <strong>Local preview</strong>
+          <span>{localUploadPreview.assetId ? "Securing shared copy…" : "Uploading securely…"}</span>
+        </div>
+        <div className={`ff-workspace-stage ${localIsScrollable ? "is-scrollable" : "is-centered"}`}>
+          <div className="ff-workspace-local-preview-surface">
+            <LocalUploadPreview preview={localUploadPreview} projectId={projectId} />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (!activeAsset) {
     return (
-      <section className="flex min-w-0 flex-1 items-center justify-center bg-[#0a0a0a] p-6 text-center" aria-labelledby="empty-canvas-title">
-        <div className="max-w-md rounded-2xl border border-dashed border-white/10 bg-[#101113] p-8">
-          <h2 id="empty-canvas-title" className="text-xl font-bold text-white">No file selected</h2>
-          <p className="mt-2 text-sm leading-6 text-zinc-500">Choose a project file to begin reviewing.</p>
-          <button type="button" onClick={openAssetSidebar} className="mt-5 min-h-11 rounded-xl bg-emerald-400 px-5 text-sm font-bold text-zinc-950 hover:bg-emerald-300">Open files</button>
+      <section className="ff-workspace-empty-canvas" aria-labelledby="empty-canvas-title">
+        <div>
+          <span aria-hidden="true" className="ff-workspace-empty-mark">◇</span>
+          <h2 id="empty-canvas-title">Choose a file</h2>
+          <p>Select a file from the left to start reviewing.</p>
+          <Button type="button" size="sm" variant="secondary" onClick={openAssetSidebar}>Open files</Button>
         </div>
       </section>
     );
@@ -790,59 +1035,37 @@ export default function CanvasArea() {
 
   return (
     <section className="ff-workspace-canvas relative flex min-w-0 flex-1 overflow-hidden" aria-label={`Review canvas for ${activeAsset.fileName}`}>
-      <div className="ff-canvas-toolbar absolute bottom-3 left-3 z-30 flex max-w-[calc(100%-1.5rem)] items-center gap-0.5 rounded-xl p-1 shadow-[0_10px_30px_rgba(0,0,0,0.3)]">
-        <button type="button" onClick={() => updateScale(scale - 0.15)} disabled={isCompareMode} aria-label="Zoom out" title="Zoom out (-)" className="h-9 w-9 rounded-lg text-lg text-zinc-300 hover:bg-white/5 disabled:opacity-40">−</button>
-        <label className="relative">
-          <span className="sr-only">Zoom percentage</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={zoomInput}
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setZoomInput(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))}
-            onBlur={commitZoomInput}
-            onFocus={(event) => event.currentTarget.select()}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-                event.preventDefault();
-                updateScale(scale + (event.key === "ArrowUp" ? 0.05 : -0.05));
-              } else if (event.key === "Home") {
-                event.preventDefault();
-                updateScale(MIN_SCALE);
-              } else if (event.key === "End") {
-                event.preventDefault();
-                updateScale(MAX_SCALE);
-              } else if (event.key === "Enter") {
-                event.preventDefault();
-                commitZoomInput();
-                event.currentTarget.blur();
-              }
-            }}
-            role="spinbutton"
-            aria-valuemin={Math.round(MIN_SCALE * 100)}
-            aria-valuemax={Math.round(MAX_SCALE * 100)}
-            aria-valuenow={Math.round(scale * 100)}
-            disabled={isCompareMode}
-            className="h-9 w-14 rounded-lg border border-white/10 bg-black/25 px-2 text-center text-sm font-semibold tabular-nums text-zinc-200 outline-none focus:border-emerald-400 disabled:opacity-40"
-          />
-          <span aria-hidden="true" className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-xs text-zinc-600">%</span>
-        </label>
-        <button type="button" onClick={() => updateScale(scale + 0.15)} disabled={isCompareMode} aria-label="Zoom in" title="Zoom in (+)" className="h-9 w-9 rounded-lg text-lg text-zinc-300 hover:bg-white/5 disabled:opacity-40">＋</button>
-        <button type="button" onClick={() => { fitPendingRef.current = false; fitView(); }} disabled={isCompareMode} aria-label="Fit and reset view" title="Fit view (F or 0)" className="h-9 rounded-lg px-2.5 text-xs font-semibold text-zinc-300 hover:bg-white/5 disabled:opacity-40">Fit</button>
-        {canCompare ? <button type="button" onClick={() => setIsCompareMode(!isCompareMode)} className={`h-9 rounded-lg px-2.5 text-xs font-bold ${isCompareMode ? "bg-sky-300 text-sky-950" : "text-sky-200 hover:bg-sky-500/10"}`}>{isCompareMode ? "Exit compare" : "Compare"}</button> : null}
-      </div>
+      <CanvasToolbar
+        scale={scale}
+        minScale={MIN_SCALE}
+        maxScale={MAX_SCALE}
+        zoomInput={zoomInput}
+        setZoomInput={setZoomInput}
+        commitZoomInput={commitZoomInput}
+        updateScale={updateScale}
+        fitView={() => { fitPendingRef.current = false; fitView(); }}
+        isCompareMode={isCompareMode}
+        canCompare={canCompare}
+        setIsCompareMode={setIsCompareMode}
+      />
 
-      <button type="button" onClick={() => setShowShortcuts((current) => !current)} aria-expanded={showShortcuts} aria-label="Show canvas keyboard shortcuts" title="Keyboard shortcuts (?)" className="ff-canvas-toolbar absolute right-3 top-3 z-30 h-9 w-9 rounded-xl text-sm font-bold text-zinc-400 shadow-[0_10px_30px_rgba(0,0,0,0.3)] hover:text-white">?</button>
+      <button
+        type="button"
+        onClick={() => setShowShortcuts((current) => !current)}
+        aria-expanded={showShortcuts}
+        aria-label="Show canvas keyboard shortcuts"
+        title="Keyboard shortcuts (?)"
+        className="ff-canvas-help"
+        data-pin-ignore="true"
+      >
+        ?
+      </button>
 
-      {showShortcuts ? (
-        <div className="absolute right-3 top-14 z-40 w-72 rounded-xl border border-white/10 bg-[#111214] p-3 text-sm text-zinc-300 shadow-[0_18px_45px_rgba(0,0,0,0.4)]" data-pin-ignore="true">
-          <div className="flex items-center justify-between"><p className="font-bold text-white">Canvas shortcuts</p><button type="button" onClick={() => setShowShortcuts(false)} aria-label="Close shortcuts" className="h-8 w-8 rounded-lg text-zinc-500 hover:bg-white/5">×</button></div>
-          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs"><dt className="font-mono text-zinc-400">Click</dt><dd>Add pin</dd><dt className="font-mono text-zinc-400">P</dt><dd>Add keyboard pin</dd><dt className="font-mono text-zinc-400">Shift + wheel</dt><dd>Zoom</dd><dt className="font-mono text-zinc-400">Space + drag</dt><dd>Pan any file</dd><dt className="font-mono text-zinc-400">Pinch / drag</dt><dd>Zoom or pan on touch</dd><dt className="font-mono text-zinc-400">Alt + ←/→</dt><dd>Previous or next file</dd><dt className="font-mono text-zinc-400">Alt + arrows</dt><dd>Move a pending pin</dd><dt className="font-mono text-zinc-400">Esc</dt><dd>Cancel or clear selection</dd></dl>
-        </div>
-      ) : null}
+      {showShortcuts ? <CanvasShortcuts onClose={() => setShowShortcuts(false)} /> : null}
 
       {isCompareMode && compareBase && compareTarget ? (
-        <div className="flex h-full w-full flex-col items-center overflow-auto p-5 pt-16">
-          <div className="mb-3 grid w-full max-w-2xl gap-2 sm:grid-cols-2" data-pin-ignore="true">
+        <div className="ff-workspace-compare-view">
+          <div className="ff-workspace-compare-selectors" data-pin-ignore="true">
             <SelectMenu label="Left version" value={compareBase.id} options={compareOptions} onChange={(value) => { setCompareBaseAssetId(value); const next = chooseCompareTarget(activeStack, value); setCompareTargetAssetId(next?.id ?? null); }} />
             <SelectMenu label="Right version" value={compareTarget.id} options={compareOptions.filter((option) => option.value !== compareBase.id)} onChange={setCompareTargetAssetId} />
           </div>
@@ -856,11 +1079,10 @@ export default function CanvasArea() {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          onWheel={handleWheel}
           onKeyDown={handleStageKeyDown}
-          className={`h-full w-full touch-none p-5 pb-16 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-400 ${usesScrollableDocument ? "overflow-auto" : "flex items-center justify-center overflow-hidden"} ${isPanning ? "cursor-grabbing select-none" : isSpacePressed ? "cursor-grab select-none" : supportsPins && !isLocked ? "cursor-crosshair" : "cursor-default"}`}
+          className={`ff-workspace-stage ${usesScrollableDocument ? "is-scrollable" : "is-centered"} ${isPanning ? "cursor-grabbing select-none" : isSpacePressed ? "cursor-grab select-none" : supportsPins && !isLocked ? "cursor-crosshair" : "cursor-default"}`}
           aria-label="Asset review canvas. Click the file to add feedback, pinch or use Shift plus the mouse wheel to zoom, and press question mark for shortcuts."
-          aria-keyshortcuts="P + - 0 F ? Alt+ArrowLeft Alt+ArrowRight Escape"
+          aria-keyshortcuts="P + - 0 F ? J K Alt+ArrowLeft Alt+ArrowRight Escape"
         >
           <div style={documentStyle} className={usesScrollableDocument ? "mx-auto w-max origin-top" : "will-change-transform"}>
             <div ref={surfaceRef} onPointerDownCapture={rememberVideoPlaybackBeforePointer} onClick={handleSurfaceClick} className="relative inline-block min-h-1 min-w-1">
@@ -871,23 +1093,24 @@ export default function CanvasArea() {
                   isLoading={securePreview.isLoading}
                   error={securePreview.error}
                   videoRef={videoRef}
-                  onVideoTimeChange={setCurrentVideoTime}
+                  onVideoTimeChange={(time) => { currentVideoTimeRef.current = time; setCurrentVideoTime(time); }}
                   onRefresh={securePreview.refresh}
+                  activeCommentId={activePinId}
+                  pendingLineRange={pendingLineRange}
                 />
               ) : (
-                <div className="flex min-h-[22rem] w-[min(44rem,82vw)] items-center justify-center rounded-2xl border border-white/10 bg-[#101113] p-8 text-center">
-                  <div className="max-w-sm">
-                    <div className={`mx-auto h-10 w-10 rounded-full border-2 ${activeAsset.processingStatus === "REJECTED" ? "border-rose-400/60 bg-rose-500/10" : "animate-pulse border-emerald-400/50 bg-emerald-500/10"}`} />
-                    <h2 className="mt-4 text-lg font-bold text-white">{activeAsset.processingStatus === "REJECTED" ? "File could not be prepared" : "Preparing secure preview"}</h2>
-                    <p className="mt-2 text-sm leading-6 text-zinc-400">{activeAsset.processingStatus === "REJECTED" ? activeAsset.processingError ?? "The file failed security or preview processing. The Designer can retry technical failures or upload a replacement." : "FinalFrame is checking the file and creating a safe review copy. This view updates automatically when it is ready."}</p>
-                  </div>
+                <div className={`ff-workspace-processing ${activeAsset.processingStatus === "REJECTED" ? "is-error" : "is-pending"}`} role="status" aria-live="polite">
+                  <span className="ff-workspace-processing-mark" aria-hidden="true" />
+                  <h2>{activeAsset.processingStatus === "REJECTED" ? "Preview unavailable" : "Preparing preview"}</h2>
+                  <p>{activeAsset.processingStatus === "REJECTED" ? activeAsset.processingError ?? "This file could not be prepared." : "It will open here as soon as it is ready."}</p>
+                  {activeAsset.processingStatus === "REJECTED" ? <Button type="button" size="sm" variant="secondary" onClick={openAssetSidebar}>File options</Button> : <small>Checking automatically</small>}
                 </div>
               )}
 
               <RemoteCursorLayer assetId={activeAsset.id} scale={scale} />
 
               {supportsPins ? filteredComments.filter((comment) => comment.xPos !== null && comment.yPos !== null).map((comment, index) => {
-                const isDesigner = comment.authorId === project.ownerId;
+                const isOwnerComment = comment.authorId === project.ownerId;
                 const isActive = activePinId === comment.id;
                 const markerPosition = commentMarkerPositions[comment.id];
                 const visibleAtVideoTime = category !== "video" || comment.timestamp === null || Math.abs(currentVideoTime - comment.timestamp) <= 1.5 || isActive;
@@ -899,15 +1122,16 @@ export default function CanvasArea() {
                     type="button"
                     onClick={(event: MouseEvent<HTMLButtonElement>) => {
                       event.stopPropagation();
-                      setActivePinId(comment.id);
+                      setActivePinId(activePinId === comment.id ? null : comment.id);
                       openFeedbackSidebar();
                     }}
+                    data-feedback-selection={comment.id}
                     aria-label={`Feedback pin ${index + 1} by ${comment.author?.name ?? "former member"}${comment.isResolved ? ", resolved" : ""}`}
                     aria-pressed={isActive}
-                    className={`absolute z-20 flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-black shadow-md transition focus-visible:ring-4 focus-visible:ring-white/40 ${isDesigner ? "border-white/70 bg-sky-400 text-sky-950" : "border-black/50 bg-emerald-400 text-emerald-950"} ${comment.isResolved ? "opacity-55" : ""} ${isActive ? "ring-4 ring-white/25" : "hover:ring-2 hover:ring-white/20"}`}
-                    style={{ left: `${markerPosition.x}%`, top: `${markerPosition.y}%`, transform: `translate(-50%, -50%) scale(${(isActive ? 1.2 : 1) / scale})` }}
+                    className={`ff-feedback-pin ${isOwnerComment ? "is-designer" : "is-client"} ${comment.isResolved ? "is-resolved" : ""} ${isActive ? "is-active" : ""}`}
+                    style={{ left: `${markerPosition.x}%`, top: `${markerPosition.y}%`, transform: `translate(-50%, -50%) scale(${(isActive ? 1.08 : 1) / scale})` }}
                   >
-                    {index + 1}
+                    <span>{index + 1}</span>
                   </button>
                 );
               }) : null}
@@ -917,7 +1141,13 @@ export default function CanvasArea() {
               ) : null}
 
               {pendingPin ? (
-                <div className="pointer-events-none absolute z-30 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-amber-300 text-xs font-black text-amber-950 shadow-md ring-4 ring-amber-300/20" style={{ left: `${pendingPin.x}%`, top: `${pendingPin.y}%`, transform: `translate(-50%, -50%) scale(${1 / scale})` }} aria-hidden="true">＋</div>
+                <div
+                  className={`ff-feedback-pin is-pending ${isPinSubmissionInFlight ? (isOwner ? "is-designer" : "is-client") : "is-draft"}`}
+                  style={{ left: `${pendingPin.x}%`, top: `${pendingPin.y}%`, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
+                  aria-hidden="true"
+                >
+                  <span>{isPinSubmissionInFlight ? nextPinnedCommentNumber : "+"}</span>
+                </div>
               ) : null}
             </div>
           </div>
@@ -925,23 +1155,35 @@ export default function CanvasArea() {
       )}
 
       {hasPendingAnchor && !isCompareMode ? (
-        <div className="absolute inset-x-3 bottom-3 z-40 mx-auto max-w-xl">
-          <CommentComposer
-            projectId={projectId}
-            assetId={activeAsset.id}
-            location={pendingApiLocation}
-            pageNumber={pendingPageNumber}
-            lineStart={pendingLineRange?.start ?? null}
-            lineEnd={pendingLineRange?.end ?? null}
-            timestamp={pendingTimestamp}
-            autoFocus
-            compact
-            title={pendingLineRange ? "Source feedback" : pendingPageNumber !== null ? "PDF feedback" : "Pinned feedback"}
-            submitLabel="Save feedback"
-            onCreated={handleCreated}
-            onCancel={cancelPendingPin}
-          />
-          <p className="mt-1 text-center text-xs text-zinc-500">{pendingPin ? "Alt + arrow keys move the anchor. Hold Shift for larger steps. " : ""}Escape cancels.</p>
+        <div className="ff-workspace-pending-feedback">
+          <div className={isPinSubmissionInFlight ? "hidden" : undefined}>
+            <CommentComposer
+              projectId={projectId}
+              assetId={activeAsset.id}
+              currentUserId={currentUserId ?? "anonymous"}
+              currentUser={currentUser}
+              isOnline={isOnline}
+              location={pendingApiLocation}
+              pageNumber={pendingPageNumber}
+              lineStart={pendingLineRange?.start ?? null}
+              lineEnd={pendingLineRange?.end ?? null}
+              timestamp={pendingTimestamp}
+              autoFocus
+              compact
+              title="Add feedback"
+              placeholder="What should change here?"
+              submitLabel="Save"
+              onCreated={handleCreated}
+              onOptimisticCreated={handleOptimisticCreated}
+              onOptimisticSettled={handleOptimisticSettled}
+              onOptimisticFailed={handleOptimisticFailed}
+              onSubmitStart={handlePinSubmitStart}
+              onSubmitError={handlePinSubmitError}
+              onCancel={cancelPendingPin}
+            />
+            <p className="sr-only">{pendingPin ? "Alt plus arrow keys move the pin. " : ""}Escape cancels feedback.</p>
+          </div>
+          {isPinSubmissionInFlight ? <span className="sr-only" role="status">Saving feedback.</span> : null}
         </div>
       ) : null}
       <span className="sr-only" aria-live="polite">Zoom {Math.round(scale * 100)} percent.</span>

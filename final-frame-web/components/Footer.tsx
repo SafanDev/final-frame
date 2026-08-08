@@ -2,19 +2,38 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import BrandLink from "@/components/navigation/BrandLink";
+import { isProductRoute } from "@/lib/utils/productRoutes";
+
+const trustLinks = [
+  ["Security", "/security"],
+  ["Privacy", "/privacy"],
+  ["Terms", "/terms"],
+  ["Support", "/support"],
+] as const;
 
 export default function Footer() {
   const pathname = usePathname();
-  if (pathname.startsWith("/project/")) return null;
+  if (pathname.startsWith("/project/") || isProductRoute(pathname)) return null;
+
   return (
-    <footer className="relative z-10 border-t border-white/[0.07] bg-[#08090b]">
-      <div className="ff-container flex flex-col gap-4 py-8 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-        <p><span className="font-black text-zinc-200">FinalFrame</span> · Clear feedback. Clear decisions.</p>
-        <nav aria-label="Trust and support" className="flex flex-wrap gap-x-4 gap-y-2">
-          <Link href="/privacy" className="transition hover:text-white">Privacy</Link>
-          <Link href="/terms" className="transition hover:text-white">Terms</Link>
-          <Link href="/security" className="transition hover:text-white">Security</Link>
-          <Link href="/support" className="transition hover:text-white">Support</Link>
+    <footer className="ff-site-footer">
+      <div className="ff-container ff-footer-inner">
+        <div className="ff-footer-brand">
+          <BrandLink compact />
+          <p>Focused review. Accountable approval.</p>
+        </div>
+        <nav aria-label="Trust and support" className="ff-footer-links">
+          {trustLinks.map(([label, href]) => (
+            <Link
+              key={href}
+              href={href}
+              aria-current={pathname === href ? "page" : undefined}
+              className={pathname === href ? "is-active" : undefined}
+            >
+              {label}
+            </Link>
+          ))}
         </nav>
       </div>
     </footer>

@@ -33,6 +33,7 @@ export default function PinPopover({ projectId, comment, ownerId, scale, positio
       aria-label="Selected feedback"
       onClick={(event) => event.stopPropagation()}
       data-pin-ignore="true"
+      data-feedback-selection={comment.id}
     >
       <div className="flex items-start gap-3">
         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-black ${designer ? "bg-sky-400 text-sky-950" : "bg-emerald-400 text-emerald-950"}`}>

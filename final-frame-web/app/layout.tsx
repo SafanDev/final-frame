@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
-import { Toaster } from "sonner";
-import AuthProvider from "@/components/AuthProvider";
+import { getCurrentSession } from "@/lib/auth/session";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import WebVitalsReporter from "@/components/observability/WebVitalsReporter";
@@ -60,7 +59,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   colorScheme: "dark",
-  themeColor: "#0a0a0b",
+  themeColor: "#090a0c",
 };
 
 export default async function RootLayout({
@@ -68,35 +67,20 @@ export default async function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   // A request-specific CSP nonce requires runtime rendering.
   await connection();
+  const session = await getCurrentSession();
 
   return (
-    <html lang="en" className="bg-[#0a0a0b]">
-      <body className="min-h-screen bg-[#0a0a0b] font-sans text-zinc-100 antialiased">
+    <html lang="en" data-scroll-behavior="smooth">
+      <body>
         <WebVitalsReporter />
-        <AuthProvider>
           <a className="skip-link" href="#main-content">
             Skip to main content
           </a>
-          <Toaster
-            position="top-center"
-            theme="dark"
-            richColors
-            closeButton
-            expand
-            toastOptions={{
-              classNames: {
-                toast: "finalframe-toast",
-                title: "finalframe-toast-title",
-                description: "finalframe-toast-description",
-              },
-            }}
-          />
-          <Navbar />
+          <Navbar currentUser={session?.user ? { name: session.user.name } : null} />
           <main id="main-content" tabIndex={-1} className="relative z-10 flex min-h-0 flex-1 flex-col">
             {children}
           </main>
           <Footer />
-        </AuthProvider>
       </body>
     </html>
   );

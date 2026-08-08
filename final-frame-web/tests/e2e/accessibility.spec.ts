@@ -21,46 +21,28 @@ for (const route of routes) {
   });
 }
 
-test("login is operable with the keyboard", async ({ page, browserName }) => {
+test("login is operable with the keyboard", async ({ page }) => {
   await page.goto("/login");
+  await page.waitForLoadState("networkidle");
 
   const skipLink = page.getByRole("link", {
     name: /skip to main content/i,
   });
+  const emailInput = page.getByRole("textbox", { name: /email address/i });
+  const passwordInput = page.getByLabel(/^password$/i);
+  const passwordToggle = page.locator('button[aria-pressed]').first();
 
   await page.keyboard.press("Tab");
-
-  if (browserName === "webkit") {
-    // Playwright WebKit follows the platform convention of tabbing directly
-    // to form controls. Verify the enabled form controls remain operable and
-    // separately prove that the skip link can be focused and activated.
-    await expect(
-      page.getByRole("textbox", { name: /email address/i }),
-    ).toBeFocused();
-
-    await page.keyboard.press("Tab");
-    await expect(
-      page.getByLabel(/^password$/i),
-    ).toBeFocused();
-
-    await page.keyboard.press("Tab");
-    await expect(
-      page.locator('button[aria-pressed]').first(),
-    ).toBeFocused();
-
-    await skipLink.focus();
-    await expect(skipLink).toBeFocused();
-    await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(/#main-content$/);
-
-    return;
-  }
-
   await expect(skipLink).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#main-content$/);
+
+  await emailInput.focus();
+  await expect(emailInput).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(
-    page.getByRole("link", { name: /finalframe/i }).first(),
-  ).toBeFocused();
+  await expect(passwordInput).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(passwordToggle).toBeFocused();
 });
 
 const authenticatedEmail = process.env.E2E_EMAIL;
@@ -86,9 +68,18 @@ test.describe("authenticated accessibility", () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto("/login");
-    await page.getByRole("textbox", { name: /email/i }).fill(authenticatedEmail || "");
-    await page.getByLabel(/password/i).fill(authenticatedPassword || "");
-    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForLoadState("networkidle");
+
+    const emailInput = page.getByRole("textbox", { name: /email/i });
+    const passwordInput = page.getByLabel(/password/i);
+    const signInButton = page.getByRole("button", { name: /sign in/i });
+
+    await emailInput.fill(authenticatedEmail || "");
+    await passwordInput.fill(authenticatedPassword || "");
+    await expect(emailInput).toHaveValue(authenticatedEmail || "");
+    await expect(passwordInput).toHaveValue(authenticatedPassword || "");
+    await expect(signInButton).toBeEnabled();
+    await signInButton.click();
     await expect(page).toHaveURL(/\/app(?:\?.*)?$/);
   });
 
@@ -225,11 +216,11 @@ test("public surfaces remain usable with reduced motion and forced colours", asy
     }
 
     const selectors = {
-      eyebrow: ".ff-eyebrow",
+      authTitle: "#auth-title",
       emailLabel: 'label[for="login-email"]',
       passwordToggle: 'button[aria-pressed]',
-      authFooter: 'section[aria-labelledby="auth-title"] > div.mt-8',
-      accountLink: 'section[aria-labelledby="auth-title"] > div.mt-8 a',
+      authFooter: ".ff-auth-footer",
+      accountLink: ".ff-auth-footer a",
       siteFooter: "footer p",
     };
 

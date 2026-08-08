@@ -44,6 +44,19 @@ export function removeWorkspaceComment(
   };
 }
 
+export function replaceWorkspaceComment(
+  project: WorkspaceProject,
+  assetId: string,
+  temporaryId: string,
+  comment: ProjectComment,
+): WorkspaceProject {
+  return upsertWorkspaceComment(
+    removeWorkspaceComment(project, assetId, temporaryId),
+    assetId,
+    comment,
+  );
+}
+
 export function setWorkspaceCommentResolved(
   project: WorkspaceProject,
   assetId: string,
