@@ -27,6 +27,15 @@ import { useSecureAssetUrl } from "@/hooks/useSecureAssetUrl";
 import { getAssetCategory } from "@/lib/assets/file-policy";
 import { upsertWorkspaceComment } from "@/lib/workspace/state";
 import {
+  clearPendingFeedbackAnchor,
+  loadPendingFeedbackAnchor,
+  loadReviewViewState,
+  savePendingFeedbackAnchor,
+  saveReviewViewState,
+  type PendingFeedbackAnchorMemory,
+  type ReviewViewState,
+} from "@/lib/workspace/review-session";
+import {
   calculateFitScale,
   normalizePointToRect,
   pointDistance,
@@ -75,6 +84,7 @@ export default function CanvasArea() {
     filteredComments,
     isOwner,
     isLocked,
+    currentUserId,
     emitCursor,
     localUploadPreview,
     clearLocalUploadPreview,
@@ -110,8 +120,10 @@ export default function CanvasArea() {
   const positionRef = useRef<Point>({ x: 0, y: 0 });
   const scaleRef = useRef(1);
   const fitPendingRef = useRef(false);
+  const restoreViewPendingRef = useRef<ReviewViewState | null>(null);
   const resumeVideoAfterPinRef = useRef(false);
   const videoWasPlayingBeforePointerRef = useRef(false);
+  const currentVideoTimeRef = useRef(0);
 
   const [scale, setScale] = useState(1);
   const [zoomInput, setZoomInput] = useState("100");
@@ -222,6 +234,11 @@ export default function CanvasArea() {
     void videoRef.current.play().catch(() => undefined);
   }, []);
 
+  const rememberPendingAnchor = useCallback((memory: PendingFeedbackAnchorMemory) => {
+    if (!activeAssetId) return;
+    savePendingFeedbackAnchor(projectId, activeAssetId, memory);
+  }, [activeAssetId, projectId]);
+
   const cancelPendingPin = useCallback(() => {
     setIsPinSubmissionInFlight(false);
     setPendingPin(null);
@@ -229,8 +246,9 @@ export default function CanvasArea() {
     setPendingPageNumber(null);
     setPendingLineRange(null);
     setPendingTimestamp(null);
+    if (activeAssetId) clearPendingFeedbackAnchor(projectId, activeAssetId);
     resumeVideoIfNeeded();
-  }, [resumeVideoIfNeeded]);
+  }, [activeAssetId, projectId, resumeVideoIfNeeded]);
 
   const pdfPointToSurface = useCallback((pageNumber: number, point: Point): Point | null => {
     const surface = surfaceRef.current;
@@ -283,19 +301,64 @@ export default function CanvasArea() {
     if (pendingPageNumber !== null) {
       setPendingApiLocation((current) => {
         const next = move(current);
-        if (next) setPendingPin(pdfPointToSurface(pendingPageNumber, next));
+        if (next) {
+          const surfacePoint = pdfPointToSurface(pendingPageNumber, next);
+          setPendingPin(surfacePoint);
+          rememberPendingAnchor({
+            surfacePoint,
+            apiLocation: next,
+            pageNumber: pendingPageNumber,
+            lineStart: pendingLineRange?.start ?? null,
+            lineEnd: pendingLineRange?.end ?? null,
+            timestamp: pendingTimestamp,
+          });
+        }
         return next;
       });
       return;
     }
 
-    setPendingPin(move);
-    setPendingApiLocation(move);
-  }, [pdfPointToSurface, pendingPageNumber]);
+    setPendingPin((current) => {
+      const next = move(current);
+      setPendingApiLocation(next);
+      if (next) {
+        rememberPendingAnchor({
+          surfacePoint: next,
+          apiLocation: next,
+          pageNumber: null,
+          lineStart: pendingLineRange?.start ?? null,
+          lineEnd: pendingLineRange?.end ?? null,
+          timestamp: pendingTimestamp,
+        });
+      }
+      return next;
+    });
+  }, [pdfPointToSurface, pendingLineRange, pendingPageNumber, pendingTimestamp, rememberPendingAnchor]);
 
   useEffect(() => {
     positionRef.current = position;
   }, [position]);
+
+  useEffect(() => {
+    currentVideoTimeRef.current = currentVideoTime;
+  }, [currentVideoTime]);
+
+  useEffect(() => {
+    if (!activeAssetId) return;
+    const rememberedAssetId = activeAssetId;
+    const stage = stageRef.current;
+    const video = videoRef.current;
+    return () => {
+      saveReviewViewState(projectId, rememberedAssetId, {
+        scale: scaleRef.current,
+        positionX: positionRef.current.x,
+        positionY: positionRef.current.y,
+        scrollLeft: stage?.scrollLeft ?? 0,
+        scrollTop: stage?.scrollTop ?? 0,
+        videoTime: video?.currentTime ?? currentVideoTimeRef.current,
+      });
+    };
+  }, [activeAssetId, projectId]);
 
   useEffect(() => {
     if (!activePinId) return;
@@ -324,23 +387,38 @@ export default function CanvasArea() {
   }, [activeAssetId, project?.assets]);
 
   useEffect(() => {
-    fitPendingRef.current = true;
-    scaleRef.current = 1;
-    positionRef.current = { x: 0, y: 0 };
-    setScale(1);
-    setZoomInput("100");
-    setPosition({ x: 0, y: 0 });
-    stageRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    setPendingPin(null);
-    setPendingApiLocation(null);
-    setPendingPageNumber(null);
-    setPendingLineRange(null);
-    setPendingTimestamp(null);
+    const rememberedView = activeAssetId ? loadReviewViewState(projectId, activeAssetId) : null;
+    restoreViewPendingRef.current = rememberedView;
+    fitPendingRef.current = !rememberedView;
+
+    if (rememberedView) {
+      updateScale(rememberedView.scale);
+      const rememberedPosition = { x: rememberedView.positionX, y: rememberedView.positionY };
+      positionRef.current = rememberedPosition;
+      setPosition(rememberedPosition);
+      setCurrentVideoTime(rememberedView.videoTime);
+    } else {
+      scaleRef.current = 1;
+      positionRef.current = { x: 0, y: 0 };
+      setScale(1);
+      setZoomInput("100");
+      setPosition({ x: 0, y: 0 });
+      setCurrentVideoTime(0);
+    }
+
+    const rememberedAnchor = activeAssetId && !isLocked ? loadPendingFeedbackAnchor(projectId, activeAssetId) : null;
+    if (activeAssetId && isLocked) clearPendingFeedbackAnchor(projectId, activeAssetId);
+    setPendingPin(rememberedAnchor?.surfacePoint ?? null);
+    setPendingApiLocation(rememberedAnchor?.apiLocation ?? null);
+    setPendingPageNumber(rememberedAnchor?.pageNumber ?? null);
+    setPendingLineRange(rememberedAnchor?.lineStart !== null && rememberedAnchor?.lineStart !== undefined
+      ? { start: rememberedAnchor.lineStart, end: rememberedAnchor.lineEnd ?? rememberedAnchor.lineStart }
+      : null);
+    setPendingTimestamp(rememberedAnchor?.timestamp ?? null);
     setIsPinSubmissionInFlight(false);
     setActivePinId(null);
-    setCurrentVideoTime(0);
     resumeVideoAfterPinRef.current = false;
-  }, [activeAssetId, setActivePinId]);
+  }, [activeAssetId, isLocked, projectId, setActivePinId, updateScale]);
 
   useEffect(() => {
     if (!activeAssetId) return;
@@ -349,12 +427,24 @@ export default function CanvasArea() {
     if (!stage || !surface || typeof ResizeObserver === "undefined") return;
 
     const attemptFit = () => {
-      if (!fitPendingRef.current) return;
       const image = surface.querySelector("img");
       const video = surface.querySelector("video");
       if (image && !image.complete) return;
       if (video && video.readyState < 1) return;
       if (!image && !video && surface.querySelector('[role="status"]')) return;
+
+      const rememberedView = restoreViewPendingRef.current;
+      if (rememberedView) {
+        stage.scrollTo({ top: rememberedView.scrollTop, left: rememberedView.scrollLeft, behavior: "auto" });
+        if (video instanceof HTMLVideoElement && rememberedView.videoTime > 0) {
+          video.currentTime = Math.min(rememberedView.videoTime, Number.isFinite(video.duration) ? video.duration : rememberedView.videoTime);
+        }
+        restoreViewPendingRef.current = null;
+        fitPendingRef.current = false;
+        return;
+      }
+
+      if (!fitPendingRef.current) return;
       if (fitView("auto")) fitPendingRef.current = false;
     };
 
@@ -692,14 +782,19 @@ export default function CanvasArea() {
         const pageNumber = Number(firstPage?.dataset.pdfPage ?? "1");
         const resolvedPageNumber = Number.isInteger(pageNumber) && pageNumber > 0 ? pageNumber : 1;
         const pagePoint = { x: 50, y: 50 };
-        setPendingPin(pdfPointToSurface(resolvedPageNumber, pagePoint) ?? pagePoint);
+        const surfacePoint = pdfPointToSurface(resolvedPageNumber, pagePoint) ?? pagePoint;
+        setPendingPin(surfacePoint);
         setPendingApiLocation(pagePoint);
         setPendingPageNumber(resolvedPageNumber);
         setPendingTimestamp(null);
+        rememberPendingAnchor({ surfacePoint, apiLocation: pagePoint, pageNumber: resolvedPageNumber, lineStart: null, lineEnd: null, timestamp: null });
       } else {
-        setPendingPin({ x: 50, y: 50 });
-        setPendingApiLocation({ x: 50, y: 50 });
-        setPendingTimestamp(category === "video" ? currentVideoTime : null);
+        const point = { x: 50, y: 50 };
+        const timestamp = category === "video" ? currentVideoTime : null;
+        setPendingPin(point);
+        setPendingApiLocation(point);
+        setPendingTimestamp(timestamp);
+        rememberPendingAnchor({ surfacePoint: point, apiLocation: point, pageNumber: null, lineStart: null, lineEnd: null, timestamp });
       }
       openFeedbackSidebar();
       return;
@@ -748,21 +843,25 @@ export default function CanvasArea() {
       const pageRect = page.getBoundingClientRect();
       if (pageRect.width <= 0 || pageRect.height <= 0) return;
       setActivePinId(null);
-      setPendingPin({
+      const surfacePoint = {
         x: clamp(((event.clientX - surfaceRect.left) / surfaceRect.width) * 100, 0, 100),
         y: clamp(((event.clientY - surfaceRect.top) / surfaceRect.height) * 100, 0, 100),
-      });
-      setPendingApiLocation({
+      };
+      const pagePoint = {
         x: clamp(((event.clientX - pageRect.left) / pageRect.width) * 100, 0, 100),
         y: clamp(((event.clientY - pageRect.top) / pageRect.height) * 100, 0, 100),
-      });
+      };
+      setPendingPin(surfacePoint);
+      setPendingApiLocation(pagePoint);
       setPendingPageNumber(pageNumber);
       setPendingLineRange(null);
       setPendingTimestamp(null);
+      rememberPendingAnchor({ surfacePoint, apiLocation: pagePoint, pageNumber, lineStart: null, lineEnd: null, timestamp: null });
       openFeedbackSidebar();
       return;
     }
 
+    let timestamp: number | null = null;
     if (category === "video" && videoRef.current) {
       const videoRect = videoRef.current.getBoundingClientRect();
       if (event.clientY >= videoRect.bottom - 54) return;
@@ -770,7 +869,8 @@ export default function CanvasArea() {
       resumeVideoAfterPinRef.current = videoWasPlayingBeforePointerRef.current;
       videoWasPlayingBeforePointerRef.current = false;
       videoRef.current.pause();
-      setPendingTimestamp(videoRef.current.currentTime);
+      timestamp = videoRef.current.currentTime;
+      setPendingTimestamp(timestamp);
     } else {
       setPendingTimestamp(null);
     }
@@ -784,6 +884,7 @@ export default function CanvasArea() {
     setPendingApiLocation(point);
     setPendingPageNumber(null);
     setPendingLineRange(null);
+    rememberPendingAnchor({ surfacePoint: point, apiLocation: point, pageNumber: null, lineStart: null, lineEnd: null, timestamp });
     openFeedbackSidebar();
   }
 
@@ -809,6 +910,7 @@ export default function CanvasArea() {
     setPendingPageNumber(null);
     setPendingLineRange(null);
     setPendingTimestamp(null);
+    if (activeAssetId) clearPendingFeedbackAnchor(projectId, activeAssetId);
     setIsPinSubmissionInFlight(false);
     openFeedbackSidebar();
     toast.success("Feedback pinned.");
@@ -930,7 +1032,7 @@ export default function CanvasArea() {
                   isLoading={securePreview.isLoading}
                   error={securePreview.error}
                   videoRef={videoRef}
-                  onVideoTimeChange={setCurrentVideoTime}
+                  onVideoTimeChange={(time) => { currentVideoTimeRef.current = time; setCurrentVideoTime(time); }}
                   onRefresh={securePreview.refresh}
                   activeCommentId={activePinId}
                   pendingLineRange={pendingLineRange}
@@ -997,6 +1099,7 @@ export default function CanvasArea() {
             <CommentComposer
               projectId={projectId}
               assetId={activeAsset.id}
+              currentUserId={currentUserId ?? "anonymous"}
               location={pendingApiLocation}
               pageNumber={pendingPageNumber}
               lineStart={pendingLineRange?.start ?? null}

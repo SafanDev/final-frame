@@ -14,6 +14,7 @@ import SelectMenu from "@/components/ui/SelectMenu";
 import { useWorkspaceData, useWorkspaceUI, type ActiveTab } from "@/contexts/WorkspaceContext";
 import { listComments } from "@/lib/api/comments";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
+import { loadFeedbackDraft } from "@/lib/workspace/review-session";
 import type { ProjectComment } from "@/lib/api/types";
 import {
   prependOlderWorkspaceComments,
@@ -53,6 +54,7 @@ export default function FeedbackSidebar() {
   const [resolutionFilter, setResolutionFilter] = useState<ResolutionFilter>("ALL");
   const [showFilters, setShowFilters] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
+  const [hasGeneralDraft, setHasGeneralDraft] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<{ message: string; requestId: string | null } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectComment | null>(null);
@@ -61,9 +63,10 @@ export default function FeedbackSidebar() {
     setResolutionFilter("ALL");
     setShowFilters(false);
     setShowComposer(false);
+    setHasGeneralDraft(Boolean(activeAsset?.id && currentUserId && loadFeedbackDraft(currentUserId, projectId, activeAsset.id, "general").trim()));
     setLoadError(null);
     setDeleteTarget(null);
-  }, [activeAsset?.id]);
+  }, [activeAsset?.id, currentUserId, projectId]);
 
   useEffect(() => {
     if (!activePinId) return;
@@ -85,7 +88,20 @@ export default function FeedbackSidebar() {
     // Newly saved feedback never steals focus; the user can select its pin explicitly.
     setActivePinId(null);
     setShowComposer(false);
+    setHasGeneralDraft(false);
     toast.success("Feedback posted.");
+  }
+
+  function toggleGeneralComposer() {
+    if (showComposer && activeAsset && currentUserId) {
+      setHasGeneralDraft(Boolean(loadFeedbackDraft(currentUserId, projectId, activeAsset.id, "general").trim()));
+    }
+    setShowComposer((current) => !current);
+  }
+
+  function cancelGeneralComposer() {
+    setHasGeneralDraft(false);
+    setShowComposer(false);
   }
 
   function handleUpdated(comment: ProjectComment) {
@@ -182,7 +198,7 @@ export default function FeedbackSidebar() {
                 <div className="ff-workspace-feedback-head-row">
                   <div className="ff-workspace-feedback-file"><h2 title={activeAsset.fileName}>{activeAsset.fileName}</h2><p>{openCount} open feedback</p></div>
                   <div className="ff-workspace-feedback-actions">
-                    {!isLocked && !isCompareMode ? <Button className="ff-workspace-feedback-add" size="sm" variant={showComposer ? "secondary" : "primary"} onClick={() => setShowComposer((current) => !current)}>{showComposer ? "Close" : "+ Add"}</Button> : null}
+                    {!isLocked && !isCompareMode ? <Button className="ff-workspace-feedback-add" size="sm" variant={showComposer ? "secondary" : "primary"} onClick={toggleGeneralComposer}>{showComposer ? "Close" : hasGeneralDraft ? "Continue" : "+ Add"}</Button> : null}
                     <Button className="ff-workspace-feedback-filter" size="sm" variant={showFilters ? "secondary" : "ghost"} onClick={() => setShowFilters((current) => !current)} aria-expanded={showFilters}>Filter</Button>
                   </div>
                 </div>
@@ -200,7 +216,7 @@ export default function FeedbackSidebar() {
                 {isLocked ? <InlineAlert tone="warning" title="Read-only project" className="mb-3">Feedback history is preserved but cannot be changed.</InlineAlert> : null}
 
                 {showComposer && !isLocked && !isCompareMode ? (
-                  <CommentComposer compact projectId={projectId} assetId={activeAsset.id} title="General feedback" placeholder="Write a note about this file…" submitLabel="Post" onCreated={handleCreated} onCancel={() => setShowComposer(false)} />
+                  <CommentComposer compact projectId={projectId} assetId={activeAsset.id} currentUserId={currentUserId ?? "anonymous"} title="General feedback" placeholder="Write a note about this file…" submitLabel="Post" onCreated={handleCreated} onCancel={cancelGeneralComposer} />
                 ) : null}
 
                 <div className="ff-workspace-comments-head"><h3>Comments</h3><span>{displayedComments.length}</span></div>

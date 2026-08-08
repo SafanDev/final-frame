@@ -372,8 +372,8 @@ assert(
   text('final-frame-api/src/routes/account.routes.ts').includes("router.post('/export'")
     && !text('final-frame-api/src/routes/account.routes.ts').includes("router.get('/export'")
     && text('final-frame-api/src/routes/account.routes.ts').includes('confirmSensitiveAccountOperation(transaction, account, input.password, input.mfaCode)')
-    && text('final-frame-web/components/account/AccountClient.tsx').includes('downloadAccountExport')
-    && !text('final-frame-web/components/account/AccountClient.tsx').includes('exportUrl'),
+    && text('final-frame-web/components/account/AccountActions.tsx').includes('downloadAccountExport')
+    && !text('final-frame-web/components/account/AccountActions.tsx').includes('exportUrl'),
   'Account exports require password and MFA step-up instead of only a live session.',
 );
 assert(
@@ -448,7 +448,7 @@ assert(
     && text('final-frame-api/src/services/notification-delivery-core.ts').includes('getNextDigestSchedule')
     && text('final-frame-api/src/services/email-outbox.ts').includes("mode === 'DAILY_DIGEST'")
     && text('final-frame-api/src/routes/account.routes.ts').includes("router.patch('/preferences'")
-    && text('final-frame-web/components/account/AccountPreferences.tsx').includes('Daily digest at 8:00 AM'),
+    && text('final-frame-web/components/account/AccountPreferences.tsx').includes('value="DAILY_DIGEST"'),
   'Notification delivery preferences support immediate email, time-zone-aware daily digests, and in-app-only delivery.',
 );
 assert(
@@ -500,7 +500,7 @@ assert(
     && text('final-frame-api/src/routes/notification.routes.ts').includes('unreadCount')
     && text('final-frame-web/app/notifications/page.tsx').includes('NotificationInbox')
     && text('final-frame-web/proxy.ts').includes('"/notifications"')
-    && text('final-frame-web/components/Navbar.tsx').includes('href="/notifications"'),
+    && text('final-frame-web/components/navigation/AccountNavigation.tsx').includes('href="/notifications"'),
   'Authenticated notification inbox exposes unread state, stable pagination, and read controls.',
 );
 
@@ -514,14 +514,15 @@ assert(
 );
 assert(
   text('final-frame-web/hooks/useVoiceRecorder.ts').includes('options?.transcribe === true')
-    && text('final-frame-web/components/feedback/VoiceRecorderControl.tsx').includes('Enable browser live transcription')
-    && text('final-frame-web/components/feedback/VoiceRecorderControl.tsx').includes('speech-service provider may process spoken audio'),
-  'Browser speech transcription is explicit opt-in and recording remains usable with a manual transcript.',
+    && text('final-frame-web/components/feedback/VoiceRecorderControl.tsx').includes('recorder.start({ transcribe: false })')
+    && !text('final-frame-web/components/feedback/VoiceRecorderControl.tsx').includes('Enable browser live transcription')
+    && !text('final-frame-web/components/feedback/VoiceRecorderControl.tsx').includes('speech-service provider may process spoken audio'),
+  'Voice recording remains available while browser speech transcription stays out of the primary review flow.',
 );
 assert(
   text('final-frame-web/lib/workspace/canvas-viewport-core.ts').includes('calculateFitScale')
     && text('final-frame-web/components/workspace/CanvasArea.tsx').includes('scaleFromPinch')
-    && text('final-frame-web/components/workspace/CanvasArea.tsx').includes('touch-none')
+    && text('final-frame-web/styles/workspace.css').includes('touch-action: none')
     && text('final-frame-web/tests/core/canvas-viewport.test.ts').includes('contain fit uses both available width and height'),
   'Canvas fit computes actual containment and touch users can pan and pinch within bounded zoom limits.',
 );
@@ -559,6 +560,42 @@ assert(
     && text('final-frame-web/tests/core/feedback-anchor.test.ts').includes('PDF feedback keeps page-local coordinates'),
   'Image, PDF, video, source-code, and general feedback preserve media-specific anchors from the browser through the API contract.',
 );
+assert(
+  text('final-frame-web/components/feedback/CommentComposer.tsx').includes('saveFeedbackDraft(currentUserId')
+    && text('final-frame-web/components/feedback/CommentComposer.tsx').includes('loadFeedbackDraft(currentUserId')
+    && text('final-frame-web/lib/workspace/review-session.ts').includes(':draft:${userId}:${projectId}:${assetId}:${kind}')
+    && text('final-frame-web/tests/unit/review-session.test.ts').includes('restores and clears feedback drafts per file and mode'),
+  'Written feedback drafts are user-scoped and recover within the active browser tab.',
+);
+assert(
+  text('final-frame-web/components/workspace/WorkspaceNavigationGuard.tsx').includes('beforeunload')
+    && text('final-frame-web/hooks/useFileUpload.ts').includes('setWorkspaceWorkflowBlocker')
+    && text('final-frame-web/components/feedback/VoiceRecorderControl.tsx').includes('setWorkspaceWorkflowBlocker')
+    && text('final-frame-web/components/workspace/WorkspaceShell.tsx').includes('<WorkspaceNavigationGuard />'),
+  'Workspace navigation protects in-progress uploads and unposted voice notes without blocking recoverable text drafts.',
+);
+assert(
+  text('final-frame-web/components/workspace/AssetSidebar.tsx').includes('type="file" multiple')
+    && text('final-frame-web/components/workspace/AssetSidebar.tsx').includes('onDrop={handleDrop}')
+    && text('final-frame-web/components/workspace/AssetSidebar.tsx').includes('processUploadBatch')
+    && text('final-frame-web/components/workspace/AssetSidebar.tsx').includes('closeMobileSidebars()'),
+  'Files support multi-select and panel-scoped drag/drop uploads while mobile selection returns users to the canvas.',
+);
+assert(
+  text('final-frame-web/components/workspace/CanvasArea.tsx').includes('saveReviewViewState')
+    && text('final-frame-web/components/workspace/CanvasArea.tsx').includes('loadPendingFeedbackAnchor')
+    && text('final-frame-web/contexts/WorkspaceContext.tsx').includes('loadLastActiveAssetId')
+    && text('final-frame-web/contexts/WorkspaceContext.tsx').includes('loadWorkspaceChromeMemory'),
+  'Review continuity restores the active file, viewport, pending pin, and workspace panel layout within the tab.',
+);
+assert(
+  text('final-frame-web/components/workspace/WorkspaceHeader.tsx').includes('saveTitleRename')
+    && text('final-frame-web/components/workspace/WorkspaceHeader.tsx').includes('saveFileRename')
+    && text('final-frame-web/components/workspace/WorkspaceHeader.tsx').includes('renameAssetStack')
+    && text('final-frame-web/components/workspace/WorkspaceHeader.tsx').includes('aria-keyshortcuts="Enter Escape"'),
+  'Owners can quickly rename the project or active file from the workspace header with keyboard-safe controls.',
+);
+
 assert(
   text('final-frame-web/components/AuthProvider.tsx').includes('UserPreferencesProvider')
     && text('final-frame-web/components/account/AccountPreferences.tsx').includes('publishUserFormattingPreferences')

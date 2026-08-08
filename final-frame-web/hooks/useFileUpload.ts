@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ApiError, getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
 import { uploadAssetFile, type UploadProgress, type UploadStage } from "@/lib/api/uploads";
 import { normalizeAssetFileName, validateAssetFile } from "@/lib/assets/file-policy";
 import type { AssetMutationResponse } from "@/lib/api/types";
+import { setWorkspaceWorkflowBlocker } from "@/lib/workspace/workflow-safety";
 
 interface UploadAttempt {
   projectId: string;
@@ -25,6 +26,7 @@ interface UploadState {
 const idleProgress: UploadProgress = { loadedBytes: 0, totalBytes: 0, percentage: 0 };
 
 export function useFileUpload() {
+  const uploadBlockerId = useId();
   const activeController = useRef<AbortController | null>(null);
   const lastAttempt = useRef<UploadAttempt | null>(null);
   const [state, setState] = useState<UploadState>({
@@ -36,7 +38,17 @@ export function useFileUpload() {
     retryable: false,
   });
 
-  useEffect(() => () => activeController.current?.abort(), []);
+  useEffect(() => () => {
+    activeController.current?.abort();
+    setWorkspaceWorkflowBlocker(uploadBlockerId, null);
+  }, [uploadBlockerId]);
+
+  useEffect(() => {
+    setWorkspaceWorkflowBlocker(
+      uploadBlockerId,
+      state.stage ? `The file upload for ${state.fileName ?? "this file"} is still in progress.` : null,
+    );
+  }, [state.fileName, state.stage, uploadBlockerId]);
 
   const cancelUpload = useCallback(() => {
     activeController.current?.abort(new DOMException("The upload was cancelled.", "AbortError"));

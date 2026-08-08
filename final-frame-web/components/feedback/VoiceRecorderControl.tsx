@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import InlineAlert from "@/components/ui/InlineAlert";
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder";
+import { setWorkspaceWorkflowBlocker } from "@/lib/workspace/workflow-safety";
 
 export interface VoiceRecordingValue {
   blob: Blob | null;
@@ -22,6 +23,7 @@ function formatDuration(seconds: number): string {
 }
 
 export default function VoiceRecorderControl({ disabled = false, onChange }: VoiceRecorderControlProps) {
+  const blockerId = useId();
   const recorder = useVoiceRecorder();
 
   useEffect(() => {
@@ -32,6 +34,15 @@ export default function VoiceRecorderControl({ disabled = false, onChange }: Voi
       reset: recorder.reset,
     });
   }, [onChange, recorder.blob, recorder.reset]);
+
+  useEffect(() => {
+    const blocksLeaving = recorder.status === "requesting" || recorder.status === "recording" || recorder.status === "ready";
+    setWorkspaceWorkflowBlocker(
+      blockerId,
+      blocksLeaving ? "A voice note is recording or attached but has not been posted yet." : null,
+    );
+    return () => setWorkspaceWorkflowBlocker(blockerId, null);
+  }, [blockerId, recorder.status]);
 
   if (!recorder.isSupported) return null;
 

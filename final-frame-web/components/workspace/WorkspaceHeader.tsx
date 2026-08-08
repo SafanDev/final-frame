@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { renameAssetStack } from "@/lib/api/assets";
 import AssetDownloadButton from "@/components/assets/AssetDownloadButton";
 import ProjectFormDialog, { type ProjectFormValues } from "@/components/dashboard/ProjectFormDialog";
 import Badge, { type BadgeTone } from "@/components/ui/Badge";
@@ -16,6 +17,7 @@ import MemberManagerDialog from "@/components/workspace/MemberManagerDialog";
 import PresenceList from "@/components/workspace/PresenceList";
 import { useWorkspaceData, useWorkspaceUI } from "@/contexts/WorkspaceContext";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
+import { normalizeAssetFileName } from "@/lib/assets/file-policy";
 import {
   downloadApprovalCertificate,
   downloadProjectAudit,
@@ -53,6 +55,7 @@ export default function WorkspaceHeader() {
   const {
     projectId,
     project,
+    setProject,
     isOwner,
     activeAsset,
     activeUsers,
@@ -71,6 +74,8 @@ export default function WorkspaceHeader() {
   const controlRef = useRef<HTMLDivElement | null>(null);
   const controlTriggerRef = useRef<HTMLButtonElement | null>(null);
   const firstControlRef = useRef<HTMLButtonElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
@@ -79,6 +84,12 @@ export default function WorkspaceHeader() {
   const [isMutating, setIsMutating] = useState(false);
   const [revisionReason, setRevisionReason] = useState("");
   const [downloadingRecord, setDownloadingRecord] = useState<"certificate" | "audit" | null>(null);
+  const [isRenamingTitle, setIsRenamingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [isTitleSaving, setIsTitleSaving] = useState(false);
+  const [isRenamingFile, setIsRenamingFile] = useState(false);
+  const [fileDraft, setFileDraft] = useState("");
+  const [isFileSaving, setIsFileSaving] = useState(false);
 
   useEffect(() => {
     if (!isControlsOpen) return;
@@ -103,11 +114,138 @@ export default function WorkspaceHeader() {
     };
   }, [isControlsOpen]);
 
+  useEffect(() => {
+    if (!isRenamingTitle) return;
+    const frame = window.requestAnimationFrame(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isRenamingTitle]);
+
+  useEffect(() => {
+    if (!isRenamingFile) return;
+    const frame = window.requestAnimationFrame(() => {
+      fileInputRef.current?.focus();
+      fileInputRef.current?.select();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isRenamingFile]);
+
+  useEffect(() => {
+    setIsRenamingFile(false);
+    setFileDraft("");
+  }, [activeAsset?.id]);
+
   if (!project) return null;
   const currentProject = project;
   const canDownload = Boolean(isOwner || project.isDownloadUnlocked);
   const focusMode = !isAssetSidebarOpen && !isFeedbackSidebarOpen;
   const signedApproval = project.latestSignedApproval;
+  const canQuickRename = isOwner && !project.isArchived && (project.status === "DRAFT" || project.status === "CHANGES_REQUESTED");
+  const canQuickRenameFile = canQuickRename && Boolean(activeAsset);
+
+  function startTitleRename() {
+    if (!canQuickRename || isTitleSaving) return;
+    setTitleDraft(currentProject.title);
+    setIsRenamingTitle(true);
+  }
+
+  function cancelTitleRename() {
+    if (isTitleSaving) return;
+    setTitleDraft("");
+    setIsRenamingTitle(false);
+  }
+
+  async function saveTitleRename(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (!canQuickRename || isTitleSaving) return;
+    const nextTitle = titleDraft.trim();
+    if (!nextTitle || nextTitle === currentProject.title) {
+      cancelTitleRename();
+      return;
+    }
+
+    setIsTitleSaving(true);
+    try {
+      const updated = await updateProject(projectId, { title: nextTitle, expectedVersion: currentProject.version });
+      setProject((current) => current ? { ...current, ...updated } : current);
+      setIsRenamingTitle(false);
+      setTitleDraft("");
+      toast.success("Project renamed.");
+    } catch (caught) {
+      const normalized = normalizeApiError(caught);
+      if (normalized.status === 409) await refreshWorkspace("title-conflict", true);
+      toast.error(getUserFacingErrorMessage(caught, "The project name could not be changed."));
+    } finally {
+      setIsTitleSaving(false);
+    }
+  }
+
+  function handleTitleKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    cancelTitleRename();
+  }
+
+  function startFileRename() {
+    if (!canQuickRenameFile || !activeAsset || isFileSaving) return;
+    setFileDraft(activeAsset.fileName);
+    setIsRenamingFile(true);
+  }
+
+  function cancelFileRename() {
+    if (isFileSaving) return;
+    setFileDraft("");
+    setIsRenamingFile(false);
+  }
+
+  async function saveFileRename(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (!canQuickRenameFile || !activeAsset || isFileSaving) return;
+    const nextFileName = normalizeAssetFileName(fileDraft);
+    if (!nextFileName) {
+      toast.error("Enter a valid file name.");
+      return;
+    }
+    if (nextFileName === activeAsset.fileName) {
+      cancelFileRename();
+      return;
+    }
+
+    const targetStackKey = activeAsset.stackKey;
+    setIsFileSaving(true);
+    try {
+      const result = await renameAssetStack(projectId, activeAsset.id, nextFileName, currentProject.version);
+      setProject((current) => {
+        if (!current) return current;
+        const renamedAssetIds = new Set(current.assets.filter((asset) => asset.stackKey === targetStackKey).map((asset) => asset.id));
+        return {
+          ...current,
+          version: result.projectVersion,
+          assets: current.assets.map((asset) => asset.stackKey === targetStackKey ? { ...asset, fileName: result.fileName } : asset),
+          finalAsset: current.finalAsset && renamedAssetIds.has(current.finalAsset.id)
+            ? { ...current.finalAsset, fileName: result.fileName }
+            : current.finalAsset,
+        };
+      });
+      setIsRenamingFile(false);
+      setFileDraft("");
+      toast.success("File renamed.");
+    } catch (caught) {
+      const normalized = normalizeApiError(caught);
+      if (normalized.status === 409) await refreshWorkspace("file-rename-conflict", true);
+      toast.error(getUserFacingErrorMessage(caught, "The file could not be renamed."));
+    } finally {
+      setIsFileSaving(false);
+    }
+  }
+
+  function handleFileKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    cancelFileRename();
+  }
 
   async function applyProjectUpdate(
     input: ConfirmAction["input"] & { title?: string; description?: string | null },
@@ -121,6 +259,7 @@ export default function WorkspaceHeader() {
           ...(input.status === "CHANGES_REQUESTED" ? { reason: revisionReason.trim() } : {}),
           expectedVersion: currentProject.version,
         });
+        await refreshWorkspace("project-updated", true);
       } else {
         const projectFields = {
           ...(input.title !== undefined ? { title: input.title } : {}),
@@ -130,12 +269,12 @@ export default function WorkspaceHeader() {
             ? { isDownloadUnlocked: input.isDownloadUnlocked }
             : {}),
         };
-        await updateProject(projectId, {
+        const updated = await updateProject(projectId, {
           ...projectFields,
           expectedVersion: currentProject.version,
         });
+        setProject((current) => current ? { ...current, ...updated } : current);
       }
-      await refreshWorkspace("project-updated", true);
       toast.success(successMessage);
       setConfirmAction(null);
       setRevisionReason("");
@@ -234,9 +373,59 @@ export default function WorkspaceHeader() {
 
         <div className="ff-workspace-title">
           <div className="ff-workspace-title-line">
-            <h1 className="ff-workspace-project-name">{project.title}</h1>
+            {isRenamingTitle ? (
+              <form className="ff-workspace-title-rename" onSubmit={(event) => void saveTitleRename(event)}>
+                <label htmlFor="workspace-project-title" className="sr-only">Project name</label>
+                <input
+                  ref={titleInputRef}
+                  id="workspace-project-title"
+                  value={titleDraft}
+                  onChange={(event) => setTitleDraft(event.target.value)}
+                  onKeyDown={handleTitleKeyDown}
+                  maxLength={100}
+                  disabled={isTitleSaving}
+                  aria-keyshortcuts="Enter Escape"
+                />
+                <button type="submit" disabled={isTitleSaving || !titleDraft.trim()} aria-label="Save project name" title="Save (Enter)">✓</button>
+                <button type="button" disabled={isTitleSaving} onClick={cancelTitleRename} aria-label="Cancel project rename" title="Cancel (Esc)">×</button>
+              </form>
+            ) : (
+              <div className="ff-workspace-project-crumb">
+                <h1 className="ff-workspace-project-name" title={project.title}>{project.title}</h1>
+                {canQuickRename ? (
+                  <button type="button" onClick={startTitleRename} className="ff-workspace-title-edit" aria-label={`Rename ${project.title}`} title="Rename project">
+                    <WorkspaceIcon name="edit" />
+                  </button>
+                ) : null}
+              </div>
+            )}
             <span className="ff-workspace-title-separator" aria-hidden="true">/</span>
-            <p className="ff-workspace-file-name">{activeAsset ? activeAsset.fileName : "Choose a file"}</p>
+            {isRenamingFile && activeAsset ? (
+              <form className="ff-workspace-file-rename" onSubmit={(event) => void saveFileRename(event)}>
+                <label htmlFor="workspace-file-name" className="sr-only">File name</label>
+                <input
+                  ref={fileInputRef}
+                  id="workspace-file-name"
+                  value={fileDraft}
+                  onChange={(event) => setFileDraft(event.target.value)}
+                  onKeyDown={handleFileKeyDown}
+                  maxLength={255}
+                  disabled={isFileSaving}
+                  aria-keyshortcuts="Enter Escape"
+                />
+                <button type="submit" disabled={isFileSaving || !fileDraft.trim()} aria-label="Save file name" title="Save (Enter)">✓</button>
+                <button type="button" disabled={isFileSaving} onClick={cancelFileRename} aria-label="Cancel file rename" title="Cancel (Esc)">×</button>
+              </form>
+            ) : (
+              <div className="ff-workspace-file-crumb">
+                <button type="button" onClick={() => setIsAssetSidebarOpen(true)} className="ff-workspace-file-name" title={activeAsset?.fileName ?? "Choose a file"} aria-label={activeAsset ? `Show ${activeAsset.fileName} in project files` : "Open project files"}>{activeAsset ? activeAsset.fileName : "Choose a file"}</button>
+                {canQuickRenameFile ? (
+                  <button type="button" onClick={startFileRename} className="ff-workspace-file-edit" aria-label={`Rename ${activeAsset?.fileName ?? "file"}`} title="Rename file">
+                    <WorkspaceIcon name="edit" />
+                  </button>
+                ) : null}
+              </div>
+            )}
             {activeAsset ? <span className="ff-workspace-file-version">v{activeAsset.version}</span> : null}
             {isRefreshing ? <span className="ff-workspace-refresh-dot" aria-label="Refreshing workspace" /> : null}
           </div>

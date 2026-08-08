@@ -10,6 +10,7 @@ import type { ProjectComment } from "@/lib/api/types";
 import { resolveFeedbackAnchor } from "@/lib/feedback/anchor-core";
 import { shouldSubmitFeedbackOnKeyDown } from "@/lib/feedback/keyboard";
 import { composeFeedbackText } from "@/lib/feedback/transcript";
+import { clearFeedbackDraft, loadFeedbackDraft, saveFeedbackDraft, type FeedbackDraftKind } from "@/lib/workspace/review-session";
 
 interface CommentLocation {
   x: number;
@@ -19,6 +20,7 @@ interface CommentLocation {
 interface CommentComposerProps {
   projectId: string;
   assetId: string;
+  currentUserId: string;
   location?: CommentLocation | null;
   pageNumber?: number | null;
   lineStart?: number | null;
@@ -49,6 +51,7 @@ function formatTimestamp(seconds: number): string {
 export default function CommentComposer({
   projectId,
   assetId,
+  currentUserId,
   location = null,
   pageNumber = null,
   lineStart = null,
@@ -74,6 +77,7 @@ export default function CommentComposer({
   const [stage, setStage] = useState<SubmissionStage>("idle");
   const [audioProgress, setAudioProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<{ message: string; requestId: string | null } | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
 
   const handleVoiceChange = useCallback((value: VoiceRecordingValue) => {
     setAudioBlob(value.blob);
@@ -88,6 +92,7 @@ export default function CommentComposer({
   const showCharacterCount = finalText.length >= 4_500 || exceedsTextLimit;
   const canSubmit = !disabled && !isSubmitting && !exceedsTextLimit && (finalText.length > 0 || Boolean(audioBlob));
   const hasAnchor = Boolean(location || timestamp !== null || pageNumber !== null || lineStart !== null);
+  const draftKind: FeedbackDraftKind = hasAnchor ? "pinned" : "general";
   const anchorLabel = timestamp !== null
     ? formatTimestamp(timestamp)
     : pageNumber !== null
@@ -97,11 +102,26 @@ export default function CommentComposer({
         : null;
   const shortcutId = `comment-shortcuts-${assetId}-${hasAnchor ? "anchor" : "general"}`;
 
+  useEffect(() => {
+    const restored = loadFeedbackDraft(currentUserId, projectId, assetId, draftKind);
+    setText(restored);
+    setDraftRestored(Boolean(restored.trim()));
+    if (!restored.trim()) return;
+    const timer = window.setTimeout(() => setDraftRestored(false), 2_500);
+    return () => window.clearTimeout(timer);
+  }, [assetId, currentUserId, draftKind, projectId]);
+
+  function clearDraft() {
+    clearFeedbackDraft(currentUserId, projectId, assetId, draftKind);
+    setDraftRestored(false);
+  }
+
   function resetComposer() {
     setText("");
     setAudioBlob(null);
     setAudioProgress(null);
     setError(null);
+    clearDraft();
     voiceResetRef.current();
   }
 
@@ -158,6 +178,19 @@ export default function CommentComposer({
     }
   }
 
+  function handleTextChange(event: ChangeEvent<HTMLTextAreaElement>) {
+    const next = event.target.value;
+    setText(next);
+    setDraftRestored(false);
+    saveFeedbackDraft(currentUserId, projectId, assetId, draftKind, next);
+  }
+
+  function handleCancel() {
+    if (isSubmitting) return;
+    clearDraft();
+    onCancel?.();
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     const shouldSubmit = shouldSubmitFeedbackOnKeyDown({
       key: event.key,
@@ -175,7 +208,7 @@ export default function CommentComposer({
   function handleFormKeyDown(event: KeyboardEvent<HTMLFormElement>) {
     if (event.key !== "Escape" || !onCancel || isSubmitting) return;
     event.preventDefault();
-    onCancel();
+    handleCancel();
   }
 
   return (
@@ -188,6 +221,7 @@ export default function CommentComposer({
         <div>
           <h3>{title}</h3>
           {anchorLabel ? <span>{anchorLabel}</span> : null}
+          {draftRestored ? <span className="ff-feedback-draft-restored">Draft restored</span> : null}
         </div>
         {showCharacterCount ? <span className={exceedsTextLimit ? "is-over-limit" : undefined}>{finalText.length}/5000</span> : null}
       </div>
@@ -196,7 +230,7 @@ export default function CommentComposer({
       <textarea
         id={`comment-${assetId}-${hasAnchor ? "anchor" : "general"}`}
         value={text}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setText(event.target.value)}
+        onChange={handleTextChange}
         onKeyDown={handleKeyDown}
         maxLength={5_000}
         rows={hasAnchor ? 3 : 2}
@@ -226,7 +260,7 @@ export default function CommentComposer({
 
       <div className="ff-feedback-composer-actions">
         {onCancel ? (
-          <button type="button" onClick={onCancel} disabled={isSubmitting} aria-keyshortcuts="Escape" title="Cancel (Esc)" className="ff-feedback-composer-cancel">Cancel</button>
+          <button type="button" onClick={handleCancel} disabled={isSubmitting} aria-keyshortcuts="Escape" title="Cancel (Esc)" className="ff-feedback-composer-cancel">Cancel</button>
         ) : null}
         <button type="submit" disabled={!canSubmit} aria-keyshortcuts="Enter" title={`${submitLabel} (Enter)`} className="ff-feedback-composer-submit">
           {isSubmitting ? "Saving…" : submitLabel}

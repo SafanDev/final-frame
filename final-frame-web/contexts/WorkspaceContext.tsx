@@ -28,6 +28,12 @@ import { createRealtimeClient, getSocketErrorCode } from "@/lib/realtime/client"
 import { mergeAssetsByFreshness } from "@/lib/workspace/asset-merge-core";
 import { getAssetUploadMimeType } from "@/lib/assets/file-policy";
 import { clearRemoteCursors, publishRemoteCursor, removeRemoteCursor } from "@/lib/realtime/cursor-events";
+import {
+  loadLastActiveAssetId,
+  loadWorkspaceChromeMemory,
+  saveLastActiveAssetId,
+  saveWorkspaceChromeMemory,
+} from "@/lib/workspace/review-session";
 import type {
   ActiveUser,
   FinalFrameSocket,
@@ -302,6 +308,7 @@ export function WorkspaceProvider({
   const pendingCursorRef = useRef<{ assetId: string; x: number; y: number } | null>(null);
   const cursorFrameRef = useRef<number | null>(null);
   const layoutModeRef = useRef<WorkspaceLayoutMode | null>(null);
+  const skipNextChromePersistRef = useRef(false);
   const sidebarPreferencesRef = useRef<Record<WorkspaceLayoutMode, { asset: boolean; feedback: boolean }>>({
     desktop: { asset: true, feedback: true },
     tablet: { asset: true, feedback: false },
@@ -388,6 +395,8 @@ export function WorkspaceProvider({
       setWorkspaceIssue(null);
       setActiveAssetId((current) => {
         if (current && nextProject.assets.some((asset) => asset.id === current)) return current;
+        const remembered = loadLastActiveAssetId(projectId);
+        if (remembered && nextProject.assets.some((asset) => asset.id === remembered)) return remembered;
         return nextProject.assets[0]?.id ?? null;
       });
 
@@ -502,12 +511,22 @@ export function WorkspaceProvider({
   }, [currentUserId, hasPendingAssetProcessing, realtimeStatus, refreshAssetProcessingStatus, sessionStatus, workspaceIssue]);
 
   useEffect(() => {
+    layoutModeRef.current = null;
     const desktop = window.matchMedia("(min-width: 1180px)");
     const tablet = window.matchMedia("(min-width: 1024px) and (max-width: 1179px)");
     const apply = () => {
       const nextMode = currentWorkspaceLayoutMode();
       if (layoutModeRef.current === nextMode) return;
       layoutModeRef.current = nextMode;
+      const remembered = loadWorkspaceChromeMemory(projectId, nextMode);
+      skipNextChromePersistRef.current = Boolean(remembered);
+      if (remembered) {
+        sidebarPreferencesRef.current[nextMode] = {
+          asset: remembered.assetSidebarOpen,
+          feedback: remembered.feedbackSidebarOpen,
+        };
+        setRightSidebarTab(remembered.rightSidebarTab);
+      }
       const preference = sidebarPreferencesRef.current[nextMode];
       setIsAssetSidebarOpenState(preference.asset);
       setIsFeedbackSidebarOpenState(preference.feedback);
@@ -519,7 +538,7 @@ export function WorkspaceProvider({
       desktop.removeEventListener("change", apply);
       tablet.removeEventListener("change", apply);
     };
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     const handleOffline = () => {
@@ -690,11 +709,19 @@ export function WorkspaceProvider({
 
   useEffect(() => {
     if (!project) return;
-    if (activeAssetId && project.assets.some((asset) => asset.id === activeAssetId)) return;
-    setActiveAssetId(project.assets[0]?.id ?? null);
+    if (activeAssetId && project.assets.some((asset) => asset.id === activeAssetId)) {
+      saveLastActiveAssetId(projectId, activeAssetId);
+      return;
+    }
+    const remembered = loadLastActiveAssetId(projectId);
+    const nextAssetId = remembered && project.assets.some((asset) => asset.id === remembered)
+      ? remembered
+      : project.assets[0]?.id ?? null;
+    setActiveAssetId(nextAssetId);
+    saveLastActiveAssetId(projectId, nextAssetId);
     setActivePinId(null);
     setIsCompareModeState(false);
-  }, [activeAssetId, project]);
+  }, [activeAssetId, project, projectId]);
 
   useEffect(() => {
     const localPreview = localUploadPreviewRef.current;
@@ -746,6 +773,15 @@ export function WorkspaceProvider({
     }
   }, []);
 
+  const persistChromePreference = useCallback((mode: WorkspaceLayoutMode) => {
+    const preference = sidebarPreferencesRef.current[mode];
+    saveWorkspaceChromeMemory(projectId, mode, {
+      assetSidebarOpen: preference.asset,
+      feedbackSidebarOpen: preference.feedback,
+      rightSidebarTab,
+    });
+  }, [projectId, rightSidebarTab]);
+
   const setIsAssetSidebarOpen = useCallback((open: boolean) => {
     const mode = currentWorkspaceLayoutMode();
     const preference = sidebarPreferencesRef.current[mode];
@@ -755,7 +791,8 @@ export function WorkspaceProvider({
       preference.feedback = false;
       setIsFeedbackSidebarOpenState(false);
     }
-  }, []);
+    persistChromePreference(mode);
+  }, [persistChromePreference]);
 
   const setIsFeedbackSidebarOpen = useCallback((open: boolean) => {
     const mode = currentWorkspaceLayoutMode();
@@ -766,7 +803,8 @@ export function WorkspaceProvider({
       preference.asset = false;
       setIsAssetSidebarOpenState(false);
     }
-  }, []);
+    persistChromePreference(mode);
+  }, [persistChromePreference]);
 
   const openAssetSidebar = useCallback(() => setIsAssetSidebarOpen(true), [setIsAssetSidebarOpen]);
   const openFeedbackSidebar = useCallback(() => setIsFeedbackSidebarOpen(true), [setIsFeedbackSidebarOpen]);
@@ -775,8 +813,22 @@ export function WorkspaceProvider({
       sidebarPreferencesRef.current.mobile = { asset: false, feedback: false };
       setIsAssetSidebarOpenState(false);
       setIsFeedbackSidebarOpenState(false);
+      saveWorkspaceChromeMemory(projectId, "mobile", {
+        assetSidebarOpen: false,
+        feedbackSidebarOpen: false,
+        rightSidebarTab,
+      });
     }
-  }, []);
+  }, [projectId, rightSidebarTab]);
+
+  useEffect(() => {
+    if (skipNextChromePersistRef.current) {
+      skipNextChromePersistRef.current = false;
+      return;
+    }
+    const mode = currentWorkspaceLayoutMode();
+    persistChromePreference(mode);
+  }, [persistChromePreference, rightSidebarTab]);
 
   const dataValue = useMemo<WorkspaceDataContextType>(() => ({
     projectId,

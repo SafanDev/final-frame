@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent } from "react";
 import { toast } from "sonner";
 import AssetDeleteDialog from "@/components/assets/AssetDeleteDialog";
 import AssetDownloadButton from "@/components/assets/AssetDownloadButton";
@@ -22,6 +22,7 @@ import { formatRelativeDate } from "@/lib/utils/format";
 import { mergeAssetsByFreshness } from "@/lib/workspace/asset-merge-core";
 import { invalidateAssetUrl, prefetchAssetUrl, warmAssetPreview } from "@/lib/storage/signed-url-cache";
 import { useFileUpload } from "@/hooks/useFileUpload";
+import { loadFilePanelMemory, saveFilePanelMemory } from "@/lib/workspace/review-session";
 
 const categoryLabels: Readonly<Record<AssetCategory | "all", string>> = {
   all: "All",
@@ -39,10 +40,13 @@ export default function AssetSidebar() {
     setActiveAssetId, assetStacks, fetchProjectDetails,
     beginLocalUploadPreview, bindLocalUploadPreview, clearLocalUploadPreview,
   } = useWorkspaceData();
-  const { isAssetSidebarOpen, setIsAssetSidebarOpen, setIsCompareMode } = useWorkspaceUI();
+  const { isAssetSidebarOpen, setIsAssetSidebarOpen, setIsCompareMode, closeMobileSidebars } = useWorkspaceUI();
   const upload = useFileUpload();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const versionInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const dragDepthRef = useRef(0);
+  const projectVersionRef = useRef(project?.version ?? 1);
   const deletedAssetTombstonesRef = useRef<Map<string, number>>(new Map());
   const lastLocalUploadRef = useRef<{ file: File; stackFileName?: string } | null>(null);
   const deletedStackTombstonesRef = useRef<Map<string, number>>(new Map());
@@ -57,6 +61,8 @@ export default function AssetSidebar() {
   const [deleteTarget, setDeleteTarget] = useState<ProjectAsset | null>(null);
   const [retryingAssetId, setRetryingAssetId] = useState<string | null>(null);
   const [selectingFinalAssetId, setSelectingFinalAssetId] = useState<string | null>(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [queuedUploadCount, setQueuedUploadCount] = useState(0);
 
   const stacks = useMemo(() => Object.values(assetStacks)
     .filter((stack) => stack.length > 0)
@@ -72,6 +78,36 @@ export default function AssetSidebar() {
   const totalStackCount = Object.keys(assetStacks).length;
   const hasMoreAssets = project?.pageInfo.assets.hasMore ?? false;
   const canDownload = Boolean(isOwner || project?.isDownloadUnlocked);
+  const canUpload = Boolean(isOwner && !isLocked);
+
+  useEffect(() => {
+    projectVersionRef.current = project?.version ?? projectVersionRef.current;
+  }, [project?.version]);
+
+  useEffect(() => {
+    const memory = loadFilePanelMemory(projectId);
+    if (!memory) return;
+    setSearch(memory.search);
+    if (memory.category in categoryLabels) setCategory(memory.category as AssetCategory | "all");
+    setExpandedStack(memory.expandedStack);
+  }, [projectId]);
+
+  useEffect(() => {
+    saveFilePanelMemory(projectId, { search, category, expandedStack });
+  }, [category, expandedStack, projectId, search]);
+
+  useEffect(() => {
+    if (!isAssetSidebarOpen) return;
+    const focusSearch = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest("input, textarea, select, [contenteditable='true']")) return;
+      event.preventDefault();
+      searchInputRef.current?.focus();
+    };
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, [isAssetSidebarOpen]);
 
   function mergeVisibleAssets(current: ProjectAsset[], incoming: ProjectAsset[]): ProjectAsset[] {
     return mergeAssetsByFreshness(current, incoming, {
@@ -83,37 +119,59 @@ export default function AssetSidebar() {
     });
   }
 
-  function applyUploadedAsset(asset: AssetMutationResponse) {
+  function applyUploadedAsset(asset: AssetMutationResponse, announce = true) {
     deletedAssetTombstonesRef.current.delete(asset.id);
+    projectVersionRef.current = asset.projectVersion;
     setProject((current) => current ? { ...current, version: asset.projectVersion, assets: mergeVisibleAssets(current.assets, [asset]) } : current);
     setActiveAssetId(asset.id);
     setExpandedStack(asset.stackKey);
     setIsCompareMode(false);
-    toast.success(asset.version > 1 ? `Version ${asset.version} uploaded and is being prepared.` : "File uploaded and is being prepared.");
+    closeMobileSidebars();
+    if (announce) toast.success(asset.version > 1 ? `Version ${asset.version} uploaded. Preparing preview…` : "File uploaded. Preparing preview…");
   }
 
-  async function processUpload(file: File, stackFileName?: string) {
-    if (!project) return;
+  async function processUpload(file: File, stackFileName?: string, announce = true): Promise<boolean> {
+    if (!project) return false;
     const validation = validateAssetFile(file);
     const previewToken = validation.valid ? beginLocalUploadPreview(file, stackFileName) : null;
     lastLocalUploadRef.current = { file, ...(stackFileName ? { stackFileName } : {}) };
 
     try {
-      const asset = await upload.uploadAsset(projectId, file, project.version, stackFileName);
+      const asset = await upload.uploadAsset(projectId, file, projectVersionRef.current, stackFileName);
       if (previewToken) bindLocalUploadPreview(previewToken, asset.id);
-      applyUploadedAsset(asset);
+      applyUploadedAsset(asset, announce);
+      return true;
     } catch (caught) {
       if (previewToken) clearLocalUploadPreview(previewToken);
       if (normalizeApiError(caught).kind !== "aborted") {
         // The persistent upload panel contains the detailed recovery message.
       }
+      return false;
+    }
+  }
+
+  async function processUploadBatch(files: readonly File[]) {
+    if (!files.length || upload.isUploading) return;
+    let completed = 0;
+    try {
+      for (let index = 0; index < files.length; index += 1) {
+        setQueuedUploadCount(files.length - index - 1);
+        const succeeded = await processUpload(files[index], undefined, files.length === 1);
+        if (!succeeded) break;
+        completed += 1;
+      }
+      if (files.length > 1 && completed > 0) {
+        toast.success(`${completed} ${completed === 1 ? "file" : "files"} uploaded. Preparing ${completed === 1 ? "preview" : "previews"}…`);
+      }
+    } finally {
+      setQueuedUploadCount(0);
     }
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (file) void processUpload(file);
+    if (files.length) void processUploadBatch(files);
   }
 
   function handleVersionChange(event: ChangeEvent<HTMLInputElement>) {
@@ -122,6 +180,45 @@ export default function AssetSidebar() {
     const target = versionStackName;
     setVersionStackName(null);
     if (file && target) void processUpload(file, target);
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLElement>) {
+    if (!canUpload || !event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDraggingFiles(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLElement>) {
+    if (!canUpload || !event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLElement>) {
+    if (!canUpload) return;
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDraggingFiles(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLElement>) {
+    if (!canUpload) return;
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDraggingFiles(false);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length) void processUploadBatch(files);
+  }
+
+  function handleSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Escape") return;
+    if (search) {
+      event.preventDefault();
+      setSearch("");
+    } else {
+      event.currentTarget.blur();
+    }
   }
 
   async function handleRetryUpload() {
@@ -248,23 +345,35 @@ export default function AssetSidebar() {
   return (
     <aside
       aria-label="Project files"
-      className="ff-workspace-assets"
+      className={`ff-workspace-assets ${isDraggingFiles ? "is-dragging-files" : ""}`}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
 
-      <input ref={fileInputRef} type="file" className="sr-only" onChange={handleFileChange} accept={ASSET_FILE_ACCEPT} />
+      <input ref={fileInputRef} type="file" multiple className="sr-only" onChange={handleFileChange} accept={ASSET_FILE_ACCEPT} />
       <input ref={versionInputRef} type="file" className="sr-only" onChange={handleVersionChange} accept={ASSET_FILE_ACCEPT} />
+      {isDraggingFiles ? (
+        <div className="ff-workspace-drop-overlay" role="status" aria-live="polite">
+          <span aria-hidden="true">＋</span>
+          <strong>Drop to upload</strong>
+          <small>Files will upload securely one at a time.</small>
+        </div>
+      ) : null}
 
       <div className="ff-workspace-panel-head">
         <div className="ff-workspace-panel-title-row">
           <div className="ff-workspace-panel-title-copy"><h2>Files</h2><span>{totalStackCount}</span></div>
           <div className="flex items-center gap-1.5">
-            {isOwner && !isLocked ? <Button size="sm" variant="primary" className="ff-workspace-upload-button" onClick={() => fileInputRef.current?.click()} disabled={upload.isUploading}><span aria-hidden="true">＋</span> Upload</Button> : null}
+            {canUpload ? <Button size="sm" variant="primary" className="ff-workspace-upload-button" onClick={() => fileInputRef.current?.click()} disabled={upload.isUploading}><span aria-hidden="true">＋</span> Upload</Button> : null}
             <Button size="icon" variant="ghost" className="ff-workspace-mobile-close lg:hidden" onClick={() => setIsAssetSidebarOpen(false)} aria-label="Close files panel">×</Button>
           </div>
         </div>
         <div className="ff-workspace-panel-search">
           <label htmlFor="asset-search" className="sr-only">Search project files</label>
-          <input id="asset-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a file…" className={`${fieldControlClass} ff-workspace-search-input`} />
+          <input ref={searchInputRef} id="asset-search" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={handleSearchKeyDown} placeholder="Find a file…" title="Press / to search files" className={`${fieldControlClass} ff-workspace-search-input`} />
+          {search ? <button type="button" onClick={() => { setSearch(""); searchInputRef.current?.focus(); }} aria-label="Clear file search" className="ff-workspace-search-clear">×</button> : null}
           <button type="button" aria-expanded={showFilters} onClick={() => setShowFilters((current) => !current)} className={`ff-workspace-filter-button ${showFilters || category !== "all" ? "is-active" : ""}`}>Filter</button>
         </div>
         {showFilters ? (
@@ -293,9 +402,9 @@ export default function AssetSidebar() {
               return (
                 <li key={latest.stackKey} className={`ff-workspace-file-card ${stackIsActive ? "is-active" : ""}`}>
                   <div className="ff-workspace-file-card-main">
-                    <button type="button" onMouseEnter={() => { if (latest.processingStatus === "CLEAN") { prefetchAssetUrl(latest.id); warmAssetPreview(latest.id, latest.previewMimeType ?? latest.mimeType, latest.previewFileSize ?? latest.fileSize); } }} onPointerDown={() => { if (latest.processingStatus === "CLEAN") prefetchAssetUrl(latest.id); }} onFocus={() => { if (latest.processingStatus === "CLEAN") { prefetchAssetUrl(latest.id); warmAssetPreview(latest.id, latest.previewMimeType ?? latest.mimeType, latest.previewFileSize ?? latest.fileSize); } }} onClick={() => { setActiveAssetId(latest.id); setIsCompareMode(false); }} className="ff-workspace-file-button">
+                    <button type="button" title={latest.fileName} aria-label={`Open ${latest.fileName}, version ${latest.version}`} onMouseEnter={() => { if (latest.processingStatus === "CLEAN") { prefetchAssetUrl(latest.id); warmAssetPreview(latest.id, latest.previewMimeType ?? latest.mimeType, latest.previewFileSize ?? latest.fileSize); } }} onPointerDown={() => { if (latest.processingStatus === "CLEAN") prefetchAssetUrl(latest.id); }} onFocus={() => { if (latest.processingStatus === "CLEAN") { prefetchAssetUrl(latest.id); warmAssetPreview(latest.id, latest.previewMimeType ?? latest.mimeType, latest.previewFileSize ?? latest.fileSize); } }} onClick={() => { setActiveAssetId(latest.id); setIsCompareMode(false); closeMobileSidebars(); }} className="ff-workspace-file-button">
                       <span className={`ff-workspace-file-icon ${stackIsActive ? "is-active" : ""}`}><AssetFileIcon category={assetCategory} /></span>
-                      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-white">{latest.fileName}</span><span className="ff-workspace-file-meta">v{latest.version} · {formatFileSize(latest.fileSize)} · {latest.processingStatus === "CLEAN" ? "Ready" : latest.processingStatus === "REJECTED" ? "Failed" : "Preparing"}</span></span>
+                      <span className="ff-workspace-file-copy"><span className="ff-workspace-file-title">{latest.fileName}</span><span className="ff-workspace-file-meta">v{latest.version} · {formatFileSize(latest.fileSize)} · {latest.processingStatus === "CLEAN" ? "Ready" : latest.processingStatus === "REJECTED" ? "Needs attention" : "Preparing preview"}</span></span>
                     </button>
                     <button type="button" onClick={() => setExpandedStack(expanded ? null : latest.stackKey)} aria-expanded={expanded} aria-label={`${expanded ? "Hide" : "Show"} versions of ${latest.fileName}`} className="ff-workspace-file-expand"><span aria-hidden="true">{expanded ? "−" : "+"}</span></button>
                   </div>
@@ -309,7 +418,7 @@ export default function AssetSidebar() {
                       <ul className="ff-workspace-version-list">
                         {stack.map((asset, index) => (
                           <li key={asset.id} className={`ff-workspace-version-row ${asset.id === activeAssetId ? "is-active" : ""}`}>
-                            <button type="button" onMouseEnter={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onPointerDown={() => { if (asset.processingStatus === "CLEAN") prefetchAssetUrl(asset.id); }} onFocus={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onClick={() => { setActiveAssetId(asset.id); setIsCompareMode(false); }} className="ff-workspace-version-main"><span>v{asset.version}{index === 0 ? " · Latest" : ""}</span><small>{formatRelativeDate(asset.updatedAt, preferences)} · {formatFileSize(asset.fileSize)} · {asset.processingStatus === "CLEAN" ? "Ready" : asset.processingStatus === "REJECTED" ? "Failed" : "Preparing"}</small></button>
+                            <button type="button" onMouseEnter={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onPointerDown={() => { if (asset.processingStatus === "CLEAN") prefetchAssetUrl(asset.id); }} onFocus={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onClick={() => { setActiveAssetId(asset.id); setIsCompareMode(false); closeMobileSidebars(); }} title={`${asset.fileName} version ${asset.version}`} aria-label={`Open ${asset.fileName}, version ${asset.version}`} className="ff-workspace-version-main"><span>v{asset.version}{index === 0 ? " · Latest" : ""}</span><small>{formatRelativeDate(asset.updatedAt, preferences)} · {formatFileSize(asset.fileSize)} · {asset.processingStatus === "CLEAN" ? "Ready" : asset.processingStatus === "REJECTED" ? "Failed" : "Preparing"}</small></button>
                             {asset.processingStatus === "REJECTED" && isOwner && !isLocked ? <button type="button" onClick={() => void handleRetryProcessing(asset)} disabled={retryingAssetId !== null} className="ff-workspace-version-action is-warning">{retryingAssetId === asset.id ? "Retrying…" : "Retry"}</button> : null}
                             {isOwner && !isLocked && asset.processingStatus === "CLEAN" ? (
                               <button
@@ -339,7 +448,7 @@ export default function AssetSidebar() {
         {hasMoreAssets ? <Button variant="secondary" onClick={handleLoadMore} loading={isLoadingMore} loadingLabel="Loading…" className="mt-3 w-full">Load more files</Button> : null}
       </div>
 
-      {upload.stage && upload.fileName ? <AssetUploadStatus fileName={upload.fileName} stage={upload.stage} progress={upload.progress} onCancel={upload.cancelUpload} /> : null}
+      {upload.stage && upload.fileName ? <AssetUploadStatus fileName={upload.fileName} stage={upload.stage} progress={upload.progress} queuedCount={queuedUploadCount} onCancel={upload.cancelUpload} /> : null}
       {!upload.stage && upload.error ? <div className="border-t border-white/10 p-4"><InlineAlert tone="error" title="Upload failed" requestId={upload.requestId}>{upload.error}</InlineAlert><div className="ff-workspace-panel-search"><Button variant="primary" size="sm" onClick={handleRetryUpload} disabled={!upload.canRetry} className="flex-1">Retry</Button><Button variant="secondary" size="sm" onClick={upload.resetUpload}>Dismiss</Button></div></div> : null}
 
       <AssetRenameDialog open={Boolean(renameAsset)} projectId={projectId} asset={renameAsset} expectedVersion={project?.version ?? 1} onClose={() => setRenameAsset(null)} onRenamed={handleRenamed} />

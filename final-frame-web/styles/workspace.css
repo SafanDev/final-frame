@@ -2890,3 +2890,369 @@
     clip-path: inset(50%);
   }
 }
+
+/* Workflow continuity + high-frequency workspace UX. */
+.ff-workspace-project-crumb {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.ff-workspace-title-edit {
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  color: #68717d;
+  opacity: 0;
+  transition: opacity var(--duration-fast) ease, color var(--duration-fast) ease, background-color var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.ff-workspace-project-crumb:hover .ff-workspace-title-edit,
+.ff-workspace-title-edit:focus-visible {
+  opacity: 1;
+}
+
+.ff-workspace-title-edit:hover,
+.ff-workspace-title-edit:focus-visible {
+  border-color: rgb(255 255 255 / 9%);
+  background: #111418;
+  color: #9de8ca;
+}
+
+.ff-workspace-title-edit:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.ff-workspace-title-edit svg {
+  width: 0.82rem;
+  height: 0.82rem;
+}
+
+.ff-workspace-file-crumb {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.ff-workspace-file-edit {
+  display: grid;
+  width: 1.48rem;
+  height: 1.48rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 0.42rem;
+  color: #69727d;
+  opacity: 0;
+  transition: opacity var(--duration-fast) ease, color var(--duration-fast) ease, background-color var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.ff-workspace-file-crumb:hover .ff-workspace-file-edit,
+.ff-workspace-file-edit:focus-visible {
+  opacity: 1;
+}
+
+.ff-workspace-file-edit:hover,
+.ff-workspace-file-edit:focus-visible {
+  border-color: rgb(255 255 255 / 9%);
+  background: #111418;
+  color: #9de8ca;
+}
+
+.ff-workspace-file-edit:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.ff-workspace-file-edit svg {
+  width: 0.78rem;
+  height: 0.78rem;
+}
+
+.ff-workspace-title-rename,
+.ff-workspace-file-rename {
+  display: flex;
+  min-width: 0;
+  max-width: min(18rem, 34vw);
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.ff-workspace-title-rename input,
+.ff-workspace-file-rename input {
+  width: min(13rem, 25vw);
+  min-width: 5rem;
+  height: 1.95rem;
+  border: 1px solid rgb(79 209 161 / 42%);
+  border-radius: 0.52rem;
+  background: #0c1110;
+  padding-inline: 0.58rem;
+  color: #f2f5f4;
+  font-size: 0.78rem;
+  font-weight: 720;
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(79 209 161 / 7%);
+}
+
+.ff-workspace-title-rename button,
+.ff-workspace-file-rename button {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 0.48rem;
+  color: #939ca7;
+  font-size: 0.72rem;
+}
+
+.ff-workspace-title-rename button[type="submit"],
+.ff-workspace-file-rename button[type="submit"] {
+  border-color: rgb(79 209 161 / 28%);
+  background: rgb(79 209 161 / 10%);
+  color: #9de8ca;
+}
+
+.ff-workspace-title-rename button:hover:not(:disabled),
+.ff-workspace-title-rename button:focus-visible,
+.ff-workspace-file-rename button:hover:not(:disabled),
+.ff-workspace-file-rename button:focus-visible {
+  background: #15191d;
+  color: #fff;
+}
+
+.ff-workspace-title-rename button:focus-visible,
+.ff-workspace-file-rename button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.ff-workspace-file-name {
+  border-radius: 0.38rem;
+  text-align: left;
+}
+
+.ff-workspace-file-name:hover,
+.ff-workspace-file-name:focus-visible {
+  color: #c9ced5;
+}
+
+.ff-workspace-file-name:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ff-workspace-assets {
+  position: relative;
+}
+
+.ff-workspace-drop-overlay {
+  position: absolute;
+  inset: 0.42rem;
+  z-index: 80;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  border: 1px dashed rgb(79 209 161 / 58%);
+  border-radius: 0.9rem;
+  background: rgb(8 13 12 / 94%);
+  padding: 1rem;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px rgb(79 209 161 / 7%), 0 18px 50px rgb(0 0 0 / 32%);
+  pointer-events: none;
+}
+
+.ff-workspace-drop-overlay > span {
+  display: grid;
+  width: 2.3rem;
+  height: 2.3rem;
+  place-items: center;
+  border: 1px solid rgb(79 209 161 / 28%);
+  border-radius: 0.7rem;
+  background: rgb(79 209 161 / 9%);
+  color: #95e7c7;
+  font-size: 1.1rem;
+}
+
+.ff-workspace-drop-overlay strong {
+  margin-top: 0.7rem;
+  color: #eef3f1;
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.ff-workspace-drop-overlay small {
+  max-width: 12rem;
+  margin-top: 0.28rem;
+  color: #8d969f;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.ff-workspace-assets.is-dragging-files .ff-workspace-panel-head,
+.ff-workspace-assets.is-dragging-files .ff-workspace-panel-scroll {
+  opacity: 0.28;
+}
+
+.ff-workspace-panel-search {
+  position: relative;
+}
+
+.ff-workspace-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 3.45rem;
+  z-index: 2;
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+  transform: translateY(-50%);
+  border-radius: 0.42rem;
+  color: #7c8590;
+  font-size: 0.82rem;
+}
+
+.ff-workspace-search-clear:hover,
+.ff-workspace-search-clear:focus-visible {
+  background: rgb(255 255 255 / 5%);
+  color: #e8ebee;
+}
+
+.ff-workspace-search-clear:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.ff-workspace-file-button:focus-visible .ff-workspace-file-title {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ff-workspace-upload-status {
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  background: rgb(79 209 161 / 3.5%);
+  padding: 0.72rem;
+}
+
+.ff-workspace-upload-status-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.ff-workspace-upload-status-head p {
+  overflow: hidden;
+  color: #edf1ef;
+  font-size: 0.74rem;
+  font-weight: 690;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ff-workspace-upload-status-head span {
+  display: block;
+  margin-top: 0.12rem;
+  color: #838d96;
+  font-size: 0.65rem;
+}
+
+.ff-workspace-upload-status-head button {
+  min-height: 1.9rem;
+  flex: 0 0 auto;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.5rem;
+  padding-inline: 0.58rem;
+  color: #a4acb5;
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.ff-workspace-upload-status-head button:hover,
+.ff-workspace-upload-status-head button:focus-visible {
+  border-color: rgb(251 113 133 / 30%);
+  background: rgb(251 113 133 / 7%);
+  color: #f6a7b4;
+}
+
+.ff-workspace-upload-track {
+  height: 0.26rem;
+  margin-top: 0.62rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+}
+
+.ff-workspace-upload-track > div {
+  height: 100%;
+  border-radius: inherit;
+  background: #4fd1a1;
+  transition: width 160ms ease;
+}
+
+.ff-workspace-upload-percent {
+  display: block;
+  margin-top: 0.32rem;
+  color: #8fdcbe;
+  font-size: 0.64rem;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ff-feedback-draft-restored {
+  border-color: rgb(79 209 161 / 18%) !important;
+  background: rgb(79 209 161 / 6%) !important;
+  color: #91d7bb !important;
+}
+
+.ff-workspace-leave-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ff-workspace-leave-list li {
+  border: 1px solid rgb(251 191 36 / 15%);
+  border-radius: 0.68rem;
+  background: rgb(251 191 36 / 5%);
+  padding: 0.68rem 0.75rem;
+  color: #d8d0bb;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.ff-workspace-leave-note {
+  margin-top: 0.72rem;
+  color: #7f8893;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .ff-workspace-title-edit,
+  .ff-workspace-file-edit {
+    opacity: 1;
+  }
+
+  .ff-workspace-title-rename,
+  .ff-workspace-file-rename {
+    max-width: 58vw;
+  }
+
+  .ff-workspace-title-rename input,
+  .ff-workspace-file-rename input {
+    width: min(10.5rem, 40vw);
+  }
+}

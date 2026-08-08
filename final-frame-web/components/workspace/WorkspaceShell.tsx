@@ -4,6 +4,7 @@ import AssetSidebar from "@/components/workspace/AssetSidebar";
 import CanvasArea from "@/components/workspace/CanvasArea";
 import FeedbackSidebar from "@/components/workspace/FeedbackSidebar";
 import WorkspaceHeader from "@/components/workspace/WorkspaceHeader";
+import WorkspaceNavigationGuard from "@/components/workspace/WorkspaceNavigationGuard";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import InlineAlert from "@/components/ui/InlineAlert";
@@ -69,6 +70,7 @@ export default function WorkspaceShell() {
 
   return (
     <div className="ff-workspace-shell fixed inset-0 z-50 flex flex-col overflow-hidden text-white">
+      <WorkspaceNavigationGuard />
       <a href="#workspace-canvas" className="skip-link">Skip to review canvas</a>
       <WorkspaceHeader />
 
