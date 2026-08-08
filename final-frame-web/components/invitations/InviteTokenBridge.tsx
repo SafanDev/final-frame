@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import InviteJoinClient from "@/components/invitations/InviteJoinClient";
+import Skeleton from "@/components/ui/Skeleton";
 import {
   INVITATION_TOKEN_STORAGE_KEY,
   normalizeInvitationToken,
@@ -28,8 +29,6 @@ export default function InviteTokenBridge() {
       storedToken = null;
     }
 
-    // Fragments are not sent to the server, but removing the secret immediately
-    // also keeps it out of copied addresses, screenshots and browser history.
     if (window.location.hash) {
       window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`);
     }
@@ -39,9 +38,14 @@ export default function InviteTokenBridge() {
 
   if (token === undefined) {
     return (
-      <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4" role="status" aria-live="polite">
-        <p className="text-sm font-medium text-zinc-400">Preparing the secure invitation…</p>
-      </div>
+      <main className="ff-invite-page" role="status" aria-live="polite">
+        <section className="ff-invite-card is-loading">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="mt-5 h-8 w-52 max-w-full" />
+          <Skeleton className="mt-3 h-4 w-72 max-w-full" />
+          <Skeleton className="mt-8 h-11 w-full" />
+        </section>
+      </main>
     );
   }
 

@@ -128,6 +128,7 @@ export default function CommentCard({
   return (
     <article
       id={`comment-${comment.id}`}
+      data-feedback-selection={comment.id}
       onClick={(event) => { if (hasAnchor && !isInteractiveTarget(event.target)) onActivate(comment); }}
       className={`rounded-xl border p-3 transition ${isActive ? "border-emerald-400/50 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.02] hover:border-white/20"} ${hasAnchor ? "cursor-pointer" : ""}`}
     >

@@ -13,9 +13,10 @@ import {
   UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { open as openFile, stat } from 'node:fs/promises';
+import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { env } from './env.js';
 import { AppError, ConflictError, ExternalServiceError } from '../errors/app-error.js';
@@ -97,6 +98,9 @@ export interface UploadedMultipartPart {
 }
 
 const storageEndpoint = env.R2_ENDPOINT ?? `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+
+const SERVER_MULTIPART_PART_BYTES = 5 * 1024 * 1024;
+const SERVER_MULTIPART_CONCURRENCY = 4;
 
 export const r2 = new S3Client({
   region: env.R2_REGION,
@@ -524,6 +528,39 @@ export const downloadStorageObjectToFile = async (
   }
 };
 
+export const downloadStorageObjectToFileWithSha256 = async (
+  storageKey: string,
+  destinationPath: string,
+): Promise<string> => {
+  try {
+    const response = await r2.send(new GetObjectCommand({
+      Bucket: env.R2_BUCKET_NAME,
+      Key: extractStorageKey(storageKey),
+    }));
+    if (!response.Body || typeof (response.Body as { pipe?: unknown }).pipe !== 'function') {
+      throw new Error('Storage response did not include a readable stream.');
+    }
+
+    const hash = createHash('sha256');
+    const hashingStream = new Transform({
+      transform(chunk, _encoding, callback) {
+        const payload = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        hash.update(payload);
+        callback(null, payload);
+      },
+    });
+
+    await pipeline(
+      response.Body as NodeJS.ReadableStream,
+      hashingStream,
+      createWriteStream(destinationPath, { flags: 'wx', mode: 0o600 }),
+    );
+    return hash.digest('hex');
+  } catch (error) {
+    throw new ExternalServiceError('Unable to read the private storage object.', error);
+  }
+};
+
 export const uploadStorageFile = async (
   storageKey: string,
   sourcePath: string,
@@ -532,15 +569,83 @@ export const uploadStorageFile = async (
   const file = await stat(sourcePath);
   if (!file.isFile() || file.size <= 0) throw new Error('Generated preview is empty.');
   const normalizedMimeType = normalizeMimeType(mimeType);
+  const key = extractStorageKey(storageKey);
+
   try {
-    await r2.send(new PutObjectCommand({
+    if (file.size <= SERVER_MULTIPART_PART_BYTES) {
+      await r2.send(new PutObjectCommand({
+        Bucket: env.R2_BUCKET_NAME,
+        Key: key,
+        Body: createReadStream(sourcePath),
+        ContentType: normalizedMimeType,
+        ContentLength: file.size,
+        IfNoneMatch: '*',
+      }));
+      return { key: storageKey, fileSize: file.size, mimeType: normalizedMimeType };
+    }
+
+    const initiated = await r2.send(new CreateMultipartUploadCommand({
       Bucket: env.R2_BUCKET_NAME,
-      Key: extractStorageKey(storageKey),
-      Body: createReadStream(sourcePath),
+      Key: key,
       ContentType: normalizedMimeType,
-      ContentLength: file.size,
-      IfNoneMatch: '*',
     }));
+    if (!initiated.UploadId) throw new Error('Storage did not return a multipart upload identifier.');
+    const uploadId = initiated.UploadId;
+    const partCount = Math.ceil(file.size / SERVER_MULTIPART_PART_BYTES);
+    const completedParts = new Array<{ PartNumber: number; ETag: string }>(partCount);
+    const handle = await openFile(sourcePath, 'r');
+    let nextPart = 0;
+
+    try {
+      const uploadWorker = async (): Promise<void> => {
+        while (true) {
+          const index = nextPart++;
+          if (index >= partCount) return;
+          const partNumber = index + 1;
+          const offset = index * SERVER_MULTIPART_PART_BYTES;
+          const length = Math.min(SERVER_MULTIPART_PART_BYTES, file.size - offset);
+          const payload = Buffer.allocUnsafe(length);
+          let filled = 0;
+          while (filled < length) {
+            const result = await handle.read(payload, filled, length - filled, offset + filled);
+            if (result.bytesRead <= 0) throw new Error('Generated preview changed while it was being uploaded.');
+            filled += result.bytesRead;
+          }
+
+          const uploaded = await r2.send(new UploadPartCommand({
+            Bucket: env.R2_BUCKET_NAME,
+            Key: key,
+            UploadId: uploadId,
+            PartNumber: partNumber,
+            Body: payload,
+            ContentLength: length,
+          }));
+          if (!uploaded.ETag) throw new Error(`Storage did not return an ETag for preview part ${partNumber}.`);
+          completedParts[index] = { PartNumber: partNumber, ETag: uploaded.ETag };
+        }
+      };
+
+      await Promise.all(Array.from(
+        { length: Math.min(SERVER_MULTIPART_CONCURRENCY, partCount) },
+        () => uploadWorker(),
+      ));
+      await r2.send(new CompleteMultipartUploadCommand({
+        Bucket: env.R2_BUCKET_NAME,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: { Parts: completedParts },
+      }));
+    } catch (error) {
+      await r2.send(new AbortMultipartUploadCommand({
+        Bucket: env.R2_BUCKET_NAME,
+        Key: key,
+        UploadId: uploadId,
+      })).catch(() => undefined);
+      throw error;
+    } finally {
+      await handle.close();
+    }
+
     return { key: storageKey, fileSize: file.size, mimeType: normalizedMimeType };
   } catch (error) {
     throw new ExternalServiceError('Unable to store the generated review preview.', error);

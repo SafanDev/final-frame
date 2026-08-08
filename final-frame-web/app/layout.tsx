@@ -70,7 +70,7 @@ export default async function RootLayout({
   await connection();
 
   return (
-    <html lang="en">
+    <html lang="en" data-scroll-behavior="smooth">
       <body>
         <WebVitalsReporter />
         <AuthProvider>

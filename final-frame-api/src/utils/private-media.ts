@@ -9,7 +9,10 @@ interface StreamPrivateObjectOptions {
   rangeHeader?: string | undefined;
   downloadFileName?: string;
   fallbackMimeType?: string | null;
+  cacheControl?: string;
+  entityTag?: string;
 }
+
 
 export async function streamPrivateObject(
   response: Response,
@@ -28,13 +31,15 @@ export async function streamPrivateObject(
 
   response.status(object.contentRange ? 206 : 200);
   response.setHeader('Accept-Ranges', 'bytes');
-  response.setHeader('Cache-Control', 'private, no-store, max-age=0');
-  response.setHeader('Pragma', 'no-cache');
+  const cacheControl = options.cacheControl ?? 'private, no-store, max-age=0';
+  response.setHeader('Cache-Control', cacheControl);
+  if (!options.cacheControl) response.setHeader('Pragma', 'no-cache');
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Content-Type', object.contentType || options.fallbackMimeType || 'application/octet-stream');
   if (object.contentLength !== null) response.setHeader('Content-Length', String(object.contentLength));
   if (object.contentRange) response.setHeader('Content-Range', object.contentRange);
-  if (object.etag) response.setHeader('ETag', object.etag);
+  if (options.entityTag) response.setHeader('ETag', options.entityTag);
+  else if (object.etag) response.setHeader('ETag', object.etag);
   if (object.lastModified) response.setHeader('Last-Modified', object.lastModified.toUTCString());
   response.setHeader(
     'Content-Disposition',

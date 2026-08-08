@@ -4,6 +4,7 @@ import { apiRoutes } from "./routes";
 import { downloadApiArtifact } from "./download";
 import {
   activityLogSchema,
+  assetProcessingSnapshotResponseSchema,
   createPageSchema,
   inviteResponseSchema,
   joinInviteResponseSchema,
@@ -16,6 +17,7 @@ import {
 } from "./schemas";
 import type {
   ActivityLog,
+  AssetProcessingSnapshotResponse,
   CreateInviteInput,
   CreateProjectInput,
   CursorPageQuery,
@@ -61,6 +63,17 @@ export async function createProject(
 export async function loadWorkspace(projectId: string, signal?: AbortSignal): Promise<WorkspaceProject> {
   const response = await apiClient.request(apiRoutes.projects.workspace(projectId), {
     schema: workspaceProjectSchema,
+    signal,
+  });
+  return response.data;
+}
+
+export async function loadAssetProcessingStatus(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<AssetProcessingSnapshotResponse> {
+  const response = await apiClient.request(apiRoutes.projects.processingStatus(projectId), {
+    schema: assetProcessingSnapshotResponseSchema,
     signal,
   });
   return response.data;

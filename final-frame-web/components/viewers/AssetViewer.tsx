@@ -8,19 +8,12 @@ import { getAssetCategory } from "@/lib/assets/file-policy";
 
 const PdfEngine = dynamic(() => import("@/components/PdfEngine"), {
   ssr: false,
-  loading: () => (
-    <div
-      role="status"
-      className="w-[min(62rem,90vw)] rounded-2xl border border-white/10 bg-[#080808] p-12 text-center text-sm text-zinc-400"
-    >
-      Loading PDF viewer…
-    </div>
-  ),
+  loading: () => <div role="status" className="ff-workspace-viewer-loading">Loading PDF…</div>,
 });
 
 const CodeViewer = dynamic(() => import("@/components/viewers/CodeViewer"), {
   ssr: false,
-  loading: () => <div role="status" className="w-[min(72rem,90vw)] rounded-2xl border border-white/10 bg-[#080808] p-12 text-center text-sm text-zinc-400">Loading source viewer…</div>,
+  loading: () => <div role="status" className="ff-workspace-viewer-loading">Loading source…</div>,
 });
 
 interface AssetViewerProps {
@@ -31,6 +24,8 @@ interface AssetViewerProps {
   videoRef: RefObject<HTMLVideoElement | null>;
   onVideoTimeChange: (seconds: number) => void;
   onRefresh: () => Promise<string | null>;
+  activeCommentId?: string | null;
+  pendingLineRange?: { start: number; end: number } | null;
 }
 
 export default function AssetViewer({
@@ -41,6 +36,8 @@ export default function AssetViewer({
   videoRef,
   onVideoTimeChange,
   onRefresh,
+  activeCommentId = null,
+  pendingLineRange = null,
 }: AssetViewerProps) {
   const category = getAssetCategory(asset);
   const mediaRefreshAttemptedRef = useRef(false);
@@ -56,7 +53,7 @@ export default function AssetViewer({
   }
 
   if (isLoading && !url) {
-    return <div role="status" className="rounded-2xl border border-white/10 bg-[#080808] px-12 py-16 text-center text-sm text-zinc-400">Preparing secure preview…</div>;
+    return <div role="status" className="ff-workspace-viewer-loading">Opening preview…</div>;
   }
 
   if (error && !url) {
@@ -76,7 +73,7 @@ export default function AssetViewer({
       <img
         src={url}
         alt={`Preview of ${asset.fileName}, version ${asset.version}`}
-        className="block max-h-[78vh] max-w-[90vw] rounded-lg border border-white/10 bg-black object-contain"
+        className="ff-workspace-image-preview"
         onError={handleExpiringMediaError}
       />
     );
@@ -87,10 +84,11 @@ export default function AssetViewer({
       <video
         ref={videoRef}
         src={url}
+        crossOrigin="use-credentials"
         controls
         playsInline
         preload="metadata"
-        className="block max-h-[78vh] max-w-[90vw] rounded-lg border border-white/10 bg-black"
+        className="ff-workspace-video-preview"
         onTimeUpdate={() => onVideoTimeChange(videoRef.current?.currentTime ?? 0)}
         onError={handleExpiringMediaError}
         aria-label={`Video preview of ${asset.fileName}, version ${asset.version}`}
@@ -105,13 +103,13 @@ export default function AssetViewer({
   }
 
   if (category === "code") {
-    return <CodeViewer asset={asset} url={url} onExpired={onRefresh} />;
+    return <CodeViewer asset={asset} url={url} onExpired={onRefresh} activeCommentId={activeCommentId} pendingLineRange={pendingLineRange} />;
   }
 
   return (
-    <div className="w-[min(38rem,90vw)] rounded-xl border border-white/10 bg-[#101113] p-8 text-center">
-      <p className="font-bold text-white">Preview is not available for this file type</p>
-      <p className="mt-2 text-sm leading-6 text-zinc-500">Use the authorised download control in the workspace header or file panel.</p>
+    <div className="ff-workspace-viewer-unavailable">
+      <strong>Preview unavailable</strong>
+      <p>Use the download option for this file.</p>
     </div>
   );
 }

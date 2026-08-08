@@ -669,6 +669,49 @@ router.get(
 );
 
 router.get(
+  '/:projectId/assets/processing-status',
+  requireAuth,
+  async (request: AuthRequest, response: Response): Promise<void> => {
+    const user = getAuthenticatedUser(request);
+    const { projectId } = projectIdParamsSchema.parse(request.params);
+    const assets = await prisma.asset.findMany({
+      where: {
+        projectId,
+        project: {
+          deletionStatus: ProjectDeletionStatus.ACTIVE,
+          OR: [
+            { ownerId: user.id },
+            { members: { some: { userId: user.id } } },
+          ],
+        },
+      },
+      select: {
+        id: true,
+        processingStatus: true,
+        processingError: true,
+        previewMimeType: true,
+        previewFileSize: true,
+        width: true,
+        height: true,
+        durationSeconds: true,
+        updatedAt: true,
+      },
+    });
+
+    if (assets.length === 0) {
+      const accessible = await prisma.project.findFirst({
+        where: activeProjectAccessWhere(projectId, user.id),
+        select: { id: true },
+      });
+      if (!accessible) throw new NotFoundError('Project not found.');
+    }
+
+    disableResponseCaching(response);
+    response.status(200).json({ assets });
+  },
+);
+
+router.get(
   '/:projectId/activity',
   requireAuth,
   async (request: AuthRequest, response: Response): Promise<void> => {

@@ -1,17 +1,96 @@
+import { createHash } from 'node:crypto';
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import { AppError, ConflictError, NotFoundError } from '../errors/app-error.js';
-import { AssetProcessingStatus } from '../generated/prisma/enums.js';
+import { AssetProcessingStatus, ProjectDeletionStatus } from '../generated/prisma/enums.js';
 import { getAuthenticatedUser, requireAuth, type AuthRequest } from '../middleware/auth.js';
 import { secureUrlLimiter } from '../middleware/rate-limit.js';
 import { currentDocumentTrust, verifySignedDocument } from '../services/document-integrity.js';
-import { assertCanDownloadOriginal, requireProjectAccess } from '../services/project-access.js';
+import { assertCanDownloadOriginal } from '../services/project-access.js';
 import { disableResponseCaching } from '../utils/http.js';
 import { streamPrivateObject } from '../utils/private-media.js';
 
 const router = Router();
+
+const PREVIEW_CACHE_CONTROL = 'private, max-age=30, must-revalidate';
+
+function previewEntityTag(previewKey: string): string {
+  const digest = createHash('sha256').update(previewKey).digest('base64url').slice(0, 32);
+  return `"ff-${digest}"`;
+}
+
+function requestAcceptsEntityTag(value: string | string[] | undefined, entityTag: string): boolean {
+  if (!value) return false;
+  const raw = Array.isArray(value) ? value.join(',') : value;
+  return raw.split(',').some((candidate) => {
+    const normalized = candidate.trim();
+    return normalized === '*' || normalized === entityTag || normalized === `W/${entityTag}`;
+  });
+}
+
+function setPrivatePreviewCacheHeaders(response: Response, entityTag: string): void {
+  response.setHeader('Cache-Control', PREVIEW_CACHE_CONTROL);
+  response.setHeader('ETag', entityTag);
+  response.vary('Cookie');
+  response.vary('Authorization');
+}
+
+async function loadAccessibleMediaAsset(assetId: string, userId: string) {
+  const asset = await prisma.asset.findFirst({
+    where: {
+      id: assetId,
+      project: {
+        deletionStatus: ProjectDeletionStatus.ACTIVE,
+        OR: [
+          { ownerId: userId },
+          { members: { some: { userId } } },
+        ],
+      },
+    },
+    select: {
+      id: true,
+      projectId: true,
+      storageKey: true,
+      previewKey: true,
+      fileName: true,
+      mimeType: true,
+      previewMimeType: true,
+      processingStatus: true,
+      processingError: true,
+      project: {
+        select: {
+          ownerId: true,
+          status: true,
+          deletionStatus: true,
+          isArchived: true,
+          isDownloadUnlocked: true,
+          members: {
+            where: { userId },
+            take: 1,
+            select: { isApprover: true },
+          },
+        },
+      },
+    },
+  });
+  if (!asset) throw new NotFoundError('Asset not found.');
+  const membership = asset.project.members[0];
+  return {
+    ...asset,
+    access: {
+      id: asset.projectId,
+      ownerId: asset.project.ownerId,
+      status: asset.project.status,
+      deletionStatus: asset.project.deletionStatus,
+      isArchived: asset.project.isArchived,
+      isDownloadUnlocked: asset.project.isDownloadUnlocked,
+      isOwner: asset.project.ownerId === userId,
+      isApprover: membership?.isApprover ?? false,
+    },
+  };
+}
 
 const secureUrlSchema = z.object({
   assetId: z.string().cuid('Invalid asset ID.'),
@@ -76,23 +155,10 @@ router.post(
     const user = getAuthenticatedUser(request);
     const input = secureUrlSchema.parse(request.body);
 
-    const asset = await prisma.asset.findUnique({
-      where: { id: input.assetId },
-      select: {
-        id: true,
-        projectId: true,
-        storageKey: true,
-        previewKey: true,
-        fileName: true,
-        processingStatus: true,
-        processingError: true,
-      },
-    });
-    if (!asset) throw new NotFoundError('Asset not found.');
+    const asset = await loadAccessibleMediaAsset(input.assetId, user.id);
 
-    const project = await requireProjectAccess(asset.projectId, user.id);
     if (input.purpose === 'download') {
-      assertCanDownloadOriginal(project);
+      assertCanDownloadOriginal(asset.access);
       if (asset.processingStatus !== AssetProcessingStatus.CLEAN) {
         throw new ConflictError('The original cannot be downloaded until security verification is complete.');
       }
@@ -131,25 +197,10 @@ router.get(
   async (request: AuthRequest, response: Response): Promise<void> => {
     const user = getAuthenticatedUser(request);
     const input = mediaAssetSchema.parse(request.params);
-    const asset = await prisma.asset.findUnique({
-      where: { id: input.assetId },
-      select: {
-        id: true,
-        projectId: true,
-        storageKey: true,
-        previewKey: true,
-        fileName: true,
-        mimeType: true,
-        previewMimeType: true,
-        processingStatus: true,
-        processingError: true,
-      },
-    });
-    if (!asset) throw new NotFoundError('Asset not found.');
+    const asset = await loadAccessibleMediaAsset(input.assetId, user.id);
 
-    const project = await requireProjectAccess(asset.projectId, user.id);
     if (input.purpose === 'download') {
-      assertCanDownloadOriginal(project);
+      assertCanDownloadOriginal(asset.access);
       if (asset.processingStatus !== AssetProcessingStatus.CLEAN) {
         throw new ConflictError('The original cannot be downloaded until security verification is complete.');
       }
@@ -179,10 +230,19 @@ router.get(
       });
     }
 
+    const entityTag = previewEntityTag(asset.previewKey);
+    setPrivatePreviewCacheHeaders(response, entityTag);
+    if (!request.headers.range && requestAcceptsEntityTag(request.headers['if-none-match'], entityTag)) {
+      response.status(304).end();
+      return;
+    }
+
     await streamPrivateObject(response, {
       storageKey: asset.previewKey,
       rangeHeader: request.headers.range,
       fallbackMimeType: asset.previewMimeType,
+      cacheControl: PREVIEW_CACHE_CONTROL,
+      entityTag,
     });
   },
 );

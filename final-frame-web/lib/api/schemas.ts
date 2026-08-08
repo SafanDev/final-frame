@@ -181,6 +181,22 @@ export const assetSchema = z.object({
   commentPageInfo: pageInfoSchema.optional(),
 });
 
+export const assetProcessingSnapshotSchema = assetSchema.pick({
+  id: true,
+  processingStatus: true,
+  processingError: true,
+  previewMimeType: true,
+  previewFileSize: true,
+  width: true,
+  height: true,
+  durationSeconds: true,
+  updatedAt: true,
+});
+
+export const assetProcessingSnapshotResponseSchema = z.object({
+  assets: z.array(assetProcessingSnapshotSchema),
+});
+
 export const approvalEventSchema = z.object({
   id: identifierSchema,
   decision: approvalDecisionSchema,

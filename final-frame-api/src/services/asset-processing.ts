@@ -1,6 +1,4 @@
-import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { createReadStream } from 'node:fs';
 import { mkdtemp, open, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -8,7 +6,7 @@ import { promisify } from 'node:util';
 import { prisma } from '../config/prisma.js';
 import {
   createPreviewStorageKey,
-  downloadStorageObjectToFile,
+  downloadStorageObjectToFileWithSha256,
   uploadStorageFile,
 } from '../config/storage.js';
 import { env } from '../config/env.js';
@@ -17,12 +15,40 @@ import { recordActivity } from './activity.js';
 import { UnsafeFileError } from '../errors/unsafe-file-error.js';
 import { assertFileIsMalwareFree, assertFileSignature } from './file-inspection.js';
 import { assertPdfPageLimit, assertVisualMediaLimits } from './media-safety.js';
-import { addStorageUsage, removeStorageUsage, requireStorageCapacity } from './quotas.js';
+import { consumeStorageCapacity, removeStorageUsage } from './quotas.js';
 import { queueStorageDeletion } from './storage-cleanup.js';
 import { logger } from '../utils/logger.js';
 
 const execFileAsync = promisify(execFile);
 const PROCESSING_LOCK_TIMEOUT_MS = env.ASSET_PROCESSING_STALE_MS;
+
+class AssetProcessingDependencyError extends Error {
+  constructor(
+    readonly tool: string,
+    cause: unknown,
+  ) {
+    super(`Required media-processing tool is unavailable: ${tool}.`, { cause });
+    this.name = 'AssetProcessingDependencyError';
+  }
+}
+
+const processingCommands = {
+  ffmpeg: env.ASSET_FFMPEG_PATH ?? 'ffmpeg',
+  ffprobe: env.ASSET_FFPROBE_PATH ?? 'ffprobe',
+  pdfinfo: env.ASSET_PDFINFO_PATH ?? 'pdfinfo',
+  ghostscript: env.ASSET_GHOSTSCRIPT_PATH ?? (process.platform === 'win32' ? 'gswin64c' : 'gs'),
+} as const;
+
+function durationMs(startedAt: number): number {
+  return Math.round((performance.now() - startedAt) * 10) / 10;
+}
+
+function videoMaxRateKbps(fileSize: number, durationSeconds?: number): number | null {
+  if (!durationSeconds || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+  const sourceTotalKbps = (fileSize * 8) / durationSeconds / 1_000;
+  const budget = Math.round(sourceTotalKbps * 1.25 - 96);
+  return Math.max(180, Math.min(6_000, budget));
+}
 
 interface ClaimedAsset {
   id: string;
@@ -34,6 +60,8 @@ interface ClaimedAsset {
   ownerId: string;
 }
 
+export type AssetProcessingSettledHandler = (projectId: string) => void | Promise<void>;
+
 interface PreviewResult {
   path: string;
   extension: string;
@@ -41,6 +69,7 @@ interface PreviewResult {
   width?: number;
   height?: number;
   durationSeconds?: number;
+  strategy: 'image-reencode' | 'video-transcode' | 'pdf-sanitize' | 'text-sanitize';
 }
 
 async function runCommand(command: string, arguments_: string[]): Promise<string> {
@@ -52,6 +81,11 @@ async function runCommand(command: string, arguments_: string[]): Promise<string
     });
     return result.stdout;
   } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : '';
+    if (code === 'ENOENT') throw new AssetProcessingDependencyError(command, error);
+
     const details = error && typeof error === 'object' && 'stderr' in error
       ? String((error as { stderr?: unknown }).stderr).slice(-2_000)
       : '';
@@ -59,29 +93,26 @@ async function runCommand(command: string, arguments_: string[]): Promise<string
   }
 }
 
-async function sha256File(path: string): Promise<string> {
-  const hash = createHash('sha256');
-  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
-  return hash.digest('hex');
-}
+type SourceMediaMetadata = Pick<PreviewResult, 'width' | 'height' | 'durationSeconds'>;
 
-async function assertSourceMediaLimits(path: string, mimeType: string): Promise<void> {
+async function assertSourceMediaLimits(path: string, mimeType: string): Promise<SourceMediaMetadata> {
   if (mimeType === 'application/pdf') {
     let output: string;
     try {
-      output = await runCommand('pdfinfo', [path]);
+      output = await runCommand(processingCommands.pdfinfo, [path]);
     } catch (error) {
+      if (error instanceof AssetProcessingDependencyError) throw error;
       throw new UnsafeFileError('The PDF could not be inspected safely.', { cause: error });
     }
     assertPdfPageLimit(output, env.ASSET_PDF_MAX_PAGES);
-    return;
+    return {};
   }
 
-  if (!mimeType.startsWith('image/') && !mimeType.startsWith('video/')) return;
+  if (!mimeType.startsWith('image/') && !mimeType.startsWith('video/')) return {};
 
   let output: string;
   try {
-    output = await runCommand('ffprobe', [
+    output = await runCommand(processingCommands.ffprobe, [
       '-v', 'error',
       '-print_format', 'json',
       '-show_streams',
@@ -89,73 +120,60 @@ async function assertSourceMediaLimits(path: string, mimeType: string): Promise<
       path,
     ]);
   } catch (error) {
+    if (error instanceof AssetProcessingDependencyError) throw error;
     throw new UnsafeFileError('The media file could not be decoded safely.', { cause: error });
   }
 
-  assertVisualMediaLimits({
+  const visualMetadata = assertVisualMediaLimits({
     probeJson: output,
     mimeType,
     imageMaximumPixels: env.ASSET_IMAGE_MAX_PIXELS,
     videoMaximumPixels: env.ASSET_VIDEO_MAX_PIXELS,
     videoMaximumDurationSeconds: env.ASSET_VIDEO_MAX_DURATION_SECONDS,
   });
+  return visualMetadata;
 }
 
-async function mediaMetadata(path: string): Promise<Pick<PreviewResult, 'width' | 'height' | 'durationSeconds'>> {
-  try {
-    const output = await runCommand('ffprobe', [
-      '-v', 'error',
-      '-print_format', 'json',
-      '-show_streams',
-      '-show_format',
-      path,
-    ]);
-    const parsed = JSON.parse(output) as {
-      streams?: Array<{ codec_type?: string; width?: number; height?: number }>;
-      format?: { duration?: string };
-    };
-    const visual = parsed.streams?.find((stream) => stream.codec_type === 'video');
-    const duration = Number(parsed.format?.duration);
-    return {
-      ...(Number.isInteger(visual?.width) && (visual?.width ?? 0) > 0 ? { width: visual!.width } : {}),
-      ...(Number.isInteger(visual?.height) && (visual?.height ?? 0) > 0 ? { height: visual!.height } : {}),
-      ...(Number.isFinite(duration) && duration >= 0 ? { durationSeconds: duration } : {}),
-    };
-  } catch {
-    return {};
-  }
-}
-
-async function buildPreview(sourcePath: string, mimeType: string, workdir: string): Promise<PreviewResult> {
+async function buildPreview(
+  sourcePath: string,
+  mimeType: string,
+  workdir: string,
+  sourceMetadata: SourceMediaMetadata,
+  sourceFileSize: number,
+): Promise<PreviewResult> {
   if (mimeType.startsWith('image/')) {
     const output = join(workdir, 'preview.webp');
-    await runCommand('ffmpeg', [
+    await runCommand(processingCommands.ffmpeg, [
       '-y', '-v', 'error', '-i', sourcePath,
       '-map_metadata', '-1',
-      '-vf', 'scale=2000:-2:force_original_aspect_ratio=decrease',
-      '-c:v', 'libwebp', '-quality', '82', '-compression_level', '4', '-loop', '0',
+      '-vf', "scale='min(2000,iw)':-2:force_original_aspect_ratio=decrease",
+      '-c:v', 'libwebp', '-quality', '82', '-compression_level', '0', '-loop', '0',
       output,
     ]);
-    return { path: output, extension: 'webp', mimeType: 'image/webp', ...await mediaMetadata(output) };
+    return { path: output, extension: 'webp', mimeType: 'image/webp', strategy: 'image-reencode', ...sourceMetadata };
   }
 
   if (mimeType.startsWith('video/')) {
     const output = join(workdir, 'preview.mp4');
-    await runCommand('ffmpeg', [
+    const maxRateKbps = videoMaxRateKbps(sourceFileSize, sourceMetadata.durationSeconds);
+    const rateArguments = maxRateKbps
+      ? ['-maxrate', `${maxRateKbps}k`, '-bufsize', `${maxRateKbps * 2}k`]
+      : [];
+    await runCommand(processingCommands.ffmpeg, [
       '-y', '-v', 'error', '-i', sourcePath,
-      '-map_metadata', '-1',
-      '-vf', 'scale=1280:-2:force_original_aspect_ratio=decrease',
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28', '-pix_fmt', 'yuv420p',
+      '-map_metadata', '-1', '-map_chapters', '-1',
+      '-vf', "scale='min(1280,iw)':-2:force_original_aspect_ratio=decrease,pad=ceil(iw/2)*2:ceil(ih/2)*2",
+      '-c:v', 'libx264', '-preset', 'superfast', '-crf', '26', ...rateArguments, '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '96k',
       '-movflags', '+faststart',
       output,
     ]);
-    return { path: output, extension: 'mp4', mimeType: 'video/mp4', ...await mediaMetadata(output) };
+    return { path: output, extension: 'mp4', mimeType: 'video/mp4', strategy: 'video-transcode', ...sourceMetadata };
   }
 
   if (mimeType === 'application/pdf') {
     const output = join(workdir, 'preview.pdf');
-    await runCommand('gs', [
+    await runCommand(processingCommands.ghostscript, [
       '-dSAFER',
       '-sDEVICE=pdfwrite',
       '-dCompatibilityLevel=1.6',
@@ -166,7 +184,7 @@ async function buildPreview(sourcePath: string, mimeType: string, workdir: strin
       `-sOutputFile=${output}`,
       sourcePath,
     ]);
-    return { path: output, extension: 'pdf', mimeType: 'application/pdf' };
+    return { path: output, extension: 'pdf', mimeType: 'application/pdf', strategy: 'pdf-sanitize' };
   }
 
   if (['application/javascript', 'application/json', 'application/typescript', 'application/xml'].includes(mimeType) || mimeType.startsWith('text/')) {
@@ -188,7 +206,7 @@ async function buildPreview(sourcePath: string, mimeType: string, workdir: strin
     if (bytesRead > env.ASSET_PREVIEW_MAX_TEXT_BYTES) text += '\n\n[Preview truncated by FinalFrame]\n';
     const output = join(workdir, 'preview.txt');
     await writeFile(output, text, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    return { path: output, extension: 'txt', mimeType: 'text/plain' };
+    return { path: output, extension: 'txt', mimeType: 'text/plain', strategy: 'text-sanitize' };
   }
 
   throw new UnsafeFileError('This file type cannot be converted into a safe review preview.');
@@ -274,45 +292,67 @@ async function rejectAsset(asset: ClaimedAsset, message: string, removeOriginal:
   });
 }
 
-export async function processOneAsset(): Promise<boolean> {
+export async function processOneAsset(onSettled?: AssetProcessingSettledHandler): Promise<boolean> {
   const asset = await claimAsset();
   if (!asset) return false;
   const workdir = await mkdtemp(join(tmpdir(), `finalframe-${asset.id}-`));
   const sourcePath = join(workdir, `source-${basename(asset.fileName).replace(/[^A-Za-z0-9._-]/g, '_')}`);
   let previewKey: string | null = null;
 
+  const processingStartedAt = performance.now();
+  const timings: Record<string, number> = {};
+
   try {
-    await downloadStorageObjectToFile(asset.storageKey, sourcePath);
+    let stageStartedAt = performance.now();
+    const sha256 = await downloadStorageObjectToFileWithSha256(asset.storageKey, sourcePath);
+    timings.download = durationMs(stageStartedAt);
+
     const sourceStat = await stat(sourcePath);
     if (!sourceStat.isFile() || sourceStat.size !== asset.fileSize) {
       throw new UnsafeFileError('The stored file size no longer matches the verified upload.');
     }
+
+    stageStartedAt = performance.now();
     await assertFileSignature(sourcePath, asset.mimeType);
-    await assertFileIsMalwareFree(sourcePath);
-    await assertSourceMediaLimits(sourcePath, asset.mimeType);
-    const sha256 = await sha256File(sourcePath);
-    const preview = await buildPreview(sourcePath, asset.mimeType, workdir);
+    timings.signature = durationMs(stageStartedAt);
+
+    stageStartedAt = performance.now();
+    const malwareStartedAt = performance.now();
+    const mediaInspectionStartedAt = performance.now();
+    const [malwareResult, mediaInspectionResult] = await Promise.allSettled([
+      assertFileIsMalwareFree(sourcePath).finally(() => {
+        timings.malwareScan = durationMs(malwareStartedAt);
+      }),
+      assertSourceMediaLimits(sourcePath, asset.mimeType).finally(() => {
+        timings.mediaInspection = durationMs(mediaInspectionStartedAt);
+      }),
+    ]);
+    timings.safetyGate = durationMs(stageStartedAt);
+    if (malwareResult.status === 'rejected') throw malwareResult.reason;
+    if (mediaInspectionResult.status === 'rejected') throw mediaInspectionResult.reason;
+    const sourceMetadata = mediaInspectionResult.value;
+
+    stageStartedAt = performance.now();
+    const preview = await buildPreview(sourcePath, asset.mimeType, workdir, sourceMetadata, asset.fileSize);
+    timings.previewBuild = durationMs(stageStartedAt);
     const previewStat = await stat(preview.path);
     if (!previewStat.isFile() || previewStat.size <= 0 || previewStat.size > env.ASSET_PREVIEW_MAX_BYTES) {
       throw new Error('Generated preview exceeded the configured review size limit.');
     }
 
     previewKey = createPreviewStorageKey(asset.projectId, asset.id, preview.extension);
+    stageStartedAt = performance.now();
     const uploaded = await uploadStorageFile(previewKey, preview.path, preview.mimeType);
+    timings.previewUpload = durationMs(stageStartedAt);
 
+    stageStartedAt = performance.now();
     const committed = await prisma.$transaction(async (transaction) => {
-      const current = await transaction.asset.findFirst({
+      const changed = await transaction.asset.updateMany({
         where: {
           id: asset.id,
           processingStatus: AssetProcessingStatus.PROCESSING,
           project: { deletionStatus: ProjectDeletionStatus.ACTIVE },
         },
-        select: { id: true },
-      });
-      if (!current) return false;
-      await requireStorageCapacity(transaction, asset.ownerId, uploaded.fileSize);
-      const changed = await transaction.asset.updateMany({
-        where: { id: asset.id, processingStatus: AssetProcessingStatus.PROCESSING },
         data: {
           previewKey: uploaded.key,
           previewMimeType: uploaded.mimeType,
@@ -327,28 +367,69 @@ export async function processOneAsset(): Promise<boolean> {
         },
       });
       if (changed.count !== 1) return false;
-      await addStorageUsage(transaction, asset.ownerId, uploaded.fileSize);
+      await consumeStorageCapacity(transaction, asset.ownerId, uploaded.fileSize);
       return true;
     });
 
+    timings.commit = durationMs(stageStartedAt);
     if (!committed) await queueStorageDeletion([previewKey]);
+    logger.info('Asset preview prepared', {
+      assetId: asset.id,
+      projectId: asset.projectId,
+      mimeType: asset.mimeType,
+      fileSize: asset.fileSize,
+      previewFileSize: uploaded.fileSize,
+      previewStrategy: preview.strategy,
+      durationMs: durationMs(processingStartedAt),
+      timings,
+    });
     return true;
   } catch (error) {
     if (previewKey) await queueStorageDeletion([previewKey]);
     const unsafe = error instanceof UnsafeFileError;
+    const dependency = error instanceof AssetProcessingDependencyError ? error.tool : null;
     const message = unsafe
       ? error.message
-      : 'Preview processing failed. The Designer can retry after the processing service is restored.';
+      : dependency
+        ? 'Preview processing is temporarily unavailable. The file can be retried after the processing tool is installed.'
+        : 'Preview processing failed. The Designer can retry after the processing service is restored.';
     await rejectAsset(asset, message, unsafe);
-    logger.warn('Asset processing failed', { assetId: asset.id, projectId: asset.projectId, unsafe, error });
+    logger.warn('Asset processing failed', {
+      assetId: asset.id,
+      projectId: asset.projectId,
+      mimeType: asset.mimeType,
+      fileSize: asset.fileSize,
+      unsafe,
+      dependency,
+      durationMs: durationMs(processingStartedAt),
+      timings,
+      error,
+    });
     return true;
   } finally {
-    await rm(workdir, { recursive: true, force: true });
+    try {
+      await rm(workdir, { recursive: true, force: true });
+    } finally {
+      if (onSettled) {
+        try {
+          await onSettled(asset.projectId);
+        } catch (error) {
+          logger.warn('Asset processing completion could not be announced', {
+            assetId: asset.id,
+            projectId: asset.projectId,
+            error,
+          });
+        }
+      }
+    }
   }
 }
 
-export async function processAssetBatch(limit = env.ASSET_PROCESSING_BATCH_SIZE): Promise<number> {
+export async function processAssetBatch(
+  limit = env.ASSET_PROCESSING_BATCH_SIZE,
+  onSettled?: AssetProcessingSettledHandler,
+): Promise<number> {
   let processed = 0;
-  while (processed < limit && await processOneAsset()) processed += 1;
+  while (processed < limit && await processOneAsset(onSettled)) processed += 1;
   return processed;
 }

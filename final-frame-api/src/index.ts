@@ -15,12 +15,15 @@ import { StorageCleanupWorker } from './workers/storage-cleanup.worker.js';
 
 const app = createApp();
 const httpServer = createServer(app);
+let socketRuntime: SocketRuntime | undefined;
 const cleanupWorker = new StorageCleanupWorker();
-const assetProcessingWorker = new AssetProcessingWorker();
+const assetProcessingWorker = new AssetProcessingWorker((projectId) => {
+  socketRuntime?.controller.refreshWorkspace(projectId, 'asset-processing-settled');
+});
+app.set('assetProcessingWorker', assetProcessingWorker);
 const emailOutboxWorker = new EmailOutboxWorker();
 const projectDeletionWorker = new ProjectDeletionWorker();
 const retentionCleanupWorker = new RetentionCleanupWorker();
-let socketRuntime: SocketRuntime | undefined;
 
 httpServer.requestTimeout = env.HTTP_REQUEST_TIMEOUT_MS;
 httpServer.headersTimeout = env.HTTP_HEADERS_TIMEOUT_MS;

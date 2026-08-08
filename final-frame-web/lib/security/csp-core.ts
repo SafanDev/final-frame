@@ -20,14 +20,15 @@ export function createContentSecurityPolicy(options: ContentSecurityPolicyOption
   const apiOrigin = new URL(options.apiUrl).origin;
   const storageOrigin = new URL(options.storageOrigin).origin;
   const nonceSource = `'nonce-${options.nonce}'`;
+  const styleSources = options.production ? `'self' ${nonceSource}` : "'self' 'unsafe-inline'";
   const directives = [
     "default-src 'self'",
     `script-src 'self' ${nonceSource} 'strict-dynamic'${options.production ? "" : " 'unsafe-eval'"}`,
-    `style-src 'self' ${nonceSource}`,
-    `style-src-elem 'self' ${nonceSource}`,
+    `style-src ${styleSources}`,
+    `style-src-elem ${styleSources}`,
     "style-src-attr 'unsafe-inline'",
-    "img-src 'self' data: blob:",
-    "media-src 'self' blob:",
+    `img-src ${uniqueSources(["'self'", "data:", "blob:", apiOrigin])}`,
+    `media-src ${uniqueSources(["'self'", "blob:", apiOrigin])}`,
     "font-src 'self' data:",
     `connect-src ${uniqueSources(["'self'", apiOrigin, websocketOrigin(options.apiUrl), websocketOrigin(options.siteUrl), storageOrigin])}`,
     "worker-src 'self' blob:",

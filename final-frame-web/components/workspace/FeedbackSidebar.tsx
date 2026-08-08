@@ -24,8 +24,8 @@ import {
 
 const roleOptions: ReadonlyArray<{ value: ActiveTab; label: string }> = [
   { value: "ALL", label: "Everyone" },
-  { value: "CLIENT", label: "Client only" },
-  { value: "DESIGNER", label: "Designer only" },
+  { value: "CLIENT", label: "Reviewers" },
+  { value: "DESIGNER", label: "Owner" },
 ];
 
 type ResolutionFilter = "ALL" | "OPEN" | "RESOLVED";
@@ -82,7 +82,8 @@ export default function FeedbackSidebar() {
 
   function handleCreated(comment: ProjectComment) {
     setProject((current) => current ? upsertWorkspaceComment(current, comment.assetId, comment) : current);
-    setActivePinId(comment.xPos !== null && comment.yPos !== null ? comment.id : null);
+    // Newly saved feedback never steals focus; the user can select its pin explicitly.
+    setActivePinId(null);
     setShowComposer(false);
     toast.success("Feedback posted.");
   }
@@ -104,7 +105,11 @@ export default function FeedbackSidebar() {
   }
 
   function handleActivate(comment: ProjectComment) {
-    setActivePinId(comment.xPos !== null && comment.yPos !== null ? comment.id : null);
+    if (comment.anchorType === "GENERAL") {
+      setActivePinId(null);
+      return;
+    }
+    setActivePinId(activePinId === comment.id ? null : comment.id);
   }
 
   async function loadOlderComments() {
@@ -136,9 +141,9 @@ export default function FeedbackSidebar() {
   if (!isFeedbackSidebarOpen || !project) return null;
 
   return (
-    <aside aria-label="Feedback and activity" className="ff-workspace-feedback flex w-[19rem] shrink-0 flex-col max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:w-[min(20rem,94vw)] max-lg:shadow-[0_20px_55px_rgba(0,0,0,0.55)]">
-      <div className="flex items-center justify-between border-b border-white/10 p-2">
-        <div role="tablist" aria-label="Workspace details" className="flex rounded-md border border-white/10 bg-black/20 p-0.5">
+    <aside aria-label="Feedback and activity" className="ff-workspace-feedback">
+      <div className="ff-workspace-feedback-tabs">
+        <div role="tablist" aria-label="Workspace details" className="ff-workspace-tablist">
           {(["FEEDBACK", "ACTIVITY"] as const).map((tab, index) => (
             <button
               key={tab}
@@ -151,41 +156,41 @@ export default function FeedbackSidebar() {
               tabIndex={rightSidebarTab === tab ? 0 : -1}
               onClick={() => setRightSidebarTab(tab)}
               onKeyDown={(event) => handlePanelTabKeyDown(event, index)}
-              className={`min-h-8 rounded px-2.5 text-xs font-bold transition ${rightSidebarTab === tab ? "bg-white text-zinc-950" : "text-zinc-400 hover:bg-white/[0.04] hover:text-white"}`}
+              className={`ff-workspace-tab ${rightSidebarTab === tab ? "is-active" : ""}`}
             >
               {tab === "FEEDBACK" ? "Feedback" : "Activity"}
             </button>
           ))}
         </div>
-        <Button variant="ghost" size="icon" onClick={() => setIsFeedbackSidebarOpen(false)} aria-label="Close feedback panel" className="text-xl lg:hidden">×</Button>
+        <Button variant="ghost" size="icon" onClick={() => setIsFeedbackSidebarOpen(false)} aria-label="Close feedback panel" className="ff-workspace-mobile-close lg:hidden">×</Button>
       </div>
 
       {rightSidebarTab === "ACTIVITY" ? (
-        <div id="workspace-activity-panel" role="tabpanel" aria-labelledby="workspace-activity-tab" className="flex-1 overflow-y-auto p-2.5"><ActivityTimeline /></div>
+        <div id="workspace-activity-panel" role="tabpanel" aria-labelledby="workspace-activity-tab" className="ff-workspace-panel-scroll"><ActivityTimeline /></div>
       ) : (
-        <div id="workspace-feedback-panel" role="tabpanel" aria-labelledby="workspace-feedback-tab" className="flex min-h-0 flex-1 flex-col">
+        <div id="workspace-feedback-panel" role="tabpanel" aria-labelledby="workspace-feedback-tab" className="ff-workspace-feedback-panel">
           {!activeAsset ? (
             <div className="flex flex-1 items-center justify-center p-4"><EmptyState compact title="Select a file" description="Feedback for the selected version will appear here." /></div>
           ) : (
             <>
-              <div className="border-b border-white/10 p-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0"><h2 className="truncate text-sm font-bold text-white">{activeAsset.fileName}</h2><p className="mt-0.5 text-xs text-zinc-500">v{activeAsset.version} · {openCount} open</p></div>
+              <div className="ff-workspace-feedback-head">
+                <div className="ff-workspace-feedback-head-row">
+                  <div className="min-w-0"><h2>Feedback</h2><p className="truncate">{activeAsset.fileName} · {openCount} open</p></div>
                   <div className="flex gap-1.5">
-                    {!isLocked && !isCompareMode ? <Button size="sm" variant={showComposer ? "secondary" : "primary"} onClick={() => setShowComposer((current) => !current)}>{showComposer ? "Close" : "New"}</Button> : null}
+                    {!isLocked && !isCompareMode ? <Button size="sm" variant={showComposer ? "secondary" : "primary"} onClick={() => setShowComposer((current) => !current)}>{showComposer ? "Close" : "Add"}</Button> : null}
                     <Button size="sm" variant={showFilters ? "secondary" : "ghost"} onClick={() => setShowFilters((current) => !current)} aria-expanded={showFilters}>Filter</Button>
                   </div>
                 </div>
 
                 {showFilters ? (
-                  <div className="mt-3 grid gap-2 rounded-xl border border-white/10 bg-black/20 p-2.5">
+                  <div className="ff-workspace-feedback-filters">
                     <SelectMenu label="Author" value={activeTab} options={roleOptions} onChange={setActiveTab} />
                     <SelectMenu label="Status" value={resolutionFilter} options={resolutionOptions} onChange={setResolutionFilter} />
                   </div>
                 ) : null}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-3">
+              <div className="ff-workspace-feedback-scroll">
                 {isCompareMode ? <InlineAlert tone="info" title="Comparison mode">Exit comparison to add or select feedback.</InlineAlert> : null}
                 {isLocked ? <InlineAlert tone="warning" title="Read-only project" className="mb-3">Feedback history is preserved but cannot be changed.</InlineAlert> : null}
 
@@ -193,14 +198,18 @@ export default function FeedbackSidebar() {
                   <CommentComposer compact projectId={projectId} assetId={activeAsset.id} title="General feedback" placeholder="Add feedback for the whole file…" onCreated={handleCreated} onCancel={() => setShowComposer(false)} />
                 ) : null}
 
-                {isOwner && !isCompareMode ? <div className="mt-3"><AiSummaryPanel projectId={projectId} assetId={activeAsset.id} commentCount={activeAsset.comments.length} /></div> : null}
+                {isOwner && !isCompareMode && activeAsset.comments.length > 0 ? <AiSummaryPanel projectId={projectId} assetId={activeAsset.id} commentCount={activeAsset.comments.length} /> : null}
 
-                <div className="mt-4 flex items-center justify-between"><h3 className="text-sm font-bold text-zinc-300">Comments</h3><span className="text-xs text-zinc-600">{displayedComments.length}</span></div>
+                <div className="ff-workspace-comments-head"><h3>Comments</h3><span>{displayedComments.length}</span></div>
 
                 {displayedComments.length === 0 ? (
-                  <div className="mt-3"><EmptyState compact title="No matching feedback" description="Add feedback or change the filters." /></div>
+                  <div className="ff-workspace-feedback-empty">
+                    <span aria-hidden="true">{showFilters || resolutionFilter !== "ALL" || activeTab !== "ALL" ? "⌕" : "+"}</span>
+                    <strong>{showFilters || resolutionFilter !== "ALL" || activeTab !== "ALL" ? "No matches" : "No feedback yet"}</strong>
+                    <p>{showFilters || resolutionFilter !== "ALL" || activeTab !== "ALL" ? "Try another filter." : isLocked ? "Feedback will appear here." : "Click the preview to pin a note, or use Add for general feedback."}</p>
+                  </div>
                 ) : (
-                  <div className="mt-2.5 space-y-2">
+                  <div className="ff-workspace-comment-list">
                     {displayedComments.map((comment) => (
                       <CommentCard
                         key={comment.id}

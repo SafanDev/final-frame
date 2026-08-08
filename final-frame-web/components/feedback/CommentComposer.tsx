@@ -33,6 +33,8 @@ interface CommentComposerProps {
   submitLabel?: string;
   compact?: boolean;
   onCreated: (comment: ProjectComment) => void;
+  onSubmitStart?: () => void;
+  onSubmitError?: () => void;
   onCancel?: () => void;
 }
 
@@ -62,6 +64,8 @@ export default function CommentComposer({
   submitLabel = "Post feedback",
   compact = false,
   onCreated,
+  onSubmitStart,
+  onSubmitError,
   onCancel,
 }: CommentComposerProps) {
   const controllerRef = useRef<AbortController | null>(null);
@@ -111,6 +115,7 @@ export default function CommentComposer({
     event.preventDefault();
     if (!canSubmit) return;
 
+    onSubmitStart?.();
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -151,6 +156,7 @@ export default function CommentComposer({
           message: getUserFacingErrorMessage(caught, "The feedback could not be saved."),
           requestId: normalized.requestId,
         });
+        onSubmitError?.();
       }
     } finally {
       if (controllerRef.current === controller) controllerRef.current = null;
