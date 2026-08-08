@@ -30,7 +30,7 @@ function WorkspaceLoading() {
 }
 
 export default function WorkspaceShell() {
-  const { project, isLoading, workspaceIssue, retryWorkspace, realtimeStatus, realtimeMessage } = useWorkspaceData();
+  const { project, isLoading, workspaceIssue, retryWorkspace, realtimeStatus } = useWorkspaceData();
   const { isAssetSidebarOpen, isFeedbackSidebarOpen, closeMobileSidebars } = useWorkspaceUI();
 
   if (isLoading && !project) return <WorkspaceLoading />;
@@ -66,7 +66,12 @@ export default function WorkspaceShell() {
   }
 
   const showMobileBackdrop = isAssetSidebarOpen || isFeedbackSidebarOpen;
-  const showConnectionBanner = realtimeStatus === "offline" || realtimeStatus === "error";
+  const showConnectionBanner = ["offline", "reconnecting", "disconnected", "error"].includes(realtimeStatus);
+  const connectionCopy = realtimeStatus === "reconnecting"
+    ? "Reconnecting — drafts are safe. Server actions will return shortly."
+    : realtimeStatus === "offline" || realtimeStatus === "disconnected"
+      ? "Offline — drafts are safe. Reconnect to post, upload, or change review state."
+      : "Connection issue — drafts are safe. Server actions are temporarily unavailable.";
 
   return (
     <div className="ff-workspace-shell fixed inset-0 z-50 flex flex-col overflow-hidden text-white">
@@ -77,7 +82,7 @@ export default function WorkspaceShell() {
       {showConnectionBanner ? (
         <div role="status" aria-live="polite" className={`ff-workspace-connection is-${realtimeStatus}`}>
           <span aria-hidden="true" />
-          <p>{realtimeMessage}</p>
+          <p>{connectionCopy}</p>
         </div>
       ) : null}
 

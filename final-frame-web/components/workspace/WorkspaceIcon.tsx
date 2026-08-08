@@ -17,6 +17,10 @@ export type WorkspaceIconName =
   | "certificate"
   | "audit"
   | "sparkles"
+  | "copy"
+  | "link"
+  | "next"
+  | "filter"
   | "trash";
 
 export default function WorkspaceIcon({ name }: { name: WorkspaceIconName }) {
@@ -37,6 +41,10 @@ export default function WorkspaceIcon({ name }: { name: WorkspaceIconName }) {
     certificate: <><path d="M6 3h12v18H6z" /><path d="M9 8h6M9 12h6" /><path d="m10 17 2-1 2 1v4h-4z" /></>,
     audit: <><path d="M5 4h14v16H5z" /><path d="M8 8h8M8 12h8M8 16h5" /></>,
     sparkles: <><path d="m12 3 1.1 3.1L16 7.2l-2.9 1.1L12 11.5l-1.1-3.2L8 7.2l2.9-1.1z" /><path d="m18.2 12.5.7 2 1.9.7-1.9.7-.7 2-.7-2-1.9-.7 1.9-.7zM6 13l.8 2.3L9 16l-2.2.8L6 19l-.8-2.2L3 16l2.2-.7z" /></>,
+    copy: <><rect x="8" y="8" width="11" height="11" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>,
+    link: <><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" /><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1" /></>,
+    next: <><path d="M5 12h13" /><path d="m14 7 5 5-5 5" /></>,
+    filter: <><path d="M4 6h16M7 12h10M10 18h4" /></>,
     trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13" /><path d="M10 11v5M14 11v5" /></>,
   };
 

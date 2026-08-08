@@ -10,6 +10,7 @@ const shortcuts = [
   ["Shift + wheel", "Zoom"],
   ["Space + drag", "Pan"],
   ["Alt + ←/→", "Change file"],
+  ["J / K", "Next / previous open feedback"],
   ["Esc", "Cancel"],
 ] as const;
 

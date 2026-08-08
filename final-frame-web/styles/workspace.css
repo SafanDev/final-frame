@@ -3256,3 +3256,296 @@
     width: min(10.5rem, 40vw);
   }
 }
+
+/* UX hardening 02 — review navigation, sharing, and connection safety */
+.ff-workspace-has-tooltip,
+.ff-workspace-mini-icon {
+  position: relative;
+}
+
+.ff-workspace-has-tooltip::after,
+.ff-workspace-mini-icon::after {
+  position: absolute;
+  top: calc(100% + 0.42rem);
+  left: 50%;
+  z-index: 140;
+  width: max-content;
+  max-width: 10rem;
+  transform: translate(-50%, -2px);
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.45rem;
+  background: #171a1e;
+  padding: 0.3rem 0.46rem;
+  color: #dde1e6;
+  content: attr(data-tooltip);
+  font-size: 0.62rem;
+  font-weight: 680;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease;
+}
+
+.ff-workspace-has-tooltip:hover::after,
+.ff-workspace-has-tooltip:focus-visible::after,
+.ff-workspace-mini-icon:hover::after,
+.ff-workspace-mini-icon:focus-visible::after {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
+.ff-workspace-feedback-file-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.ff-workspace-feedback-file-line h2 {
+  min-width: 0;
+}
+
+.ff-workspace-mini-icon {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  min-height: 1.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.45rem;
+  color: #7f8995;
+  transition: background-color var(--duration-fast) ease, color var(--duration-fast) ease;
+}
+
+.ff-workspace-mini-icon:hover,
+.ff-workspace-mini-icon:focus-visible {
+  background: rgb(255 255 255 / 5%);
+  color: #dfe4e9;
+  outline: none;
+}
+
+.ff-workspace-mini-icon svg {
+  width: 0.9rem !important;
+  height: 0.9rem !important;
+}
+
+.ff-workspace-next-feedback {
+  display: inline-flex;
+  min-height: 2.08rem;
+  align-items: center;
+  gap: 0.32rem;
+  border: 1px solid rgb(128 200 238 / 18%);
+  border-radius: 0.56rem;
+  background: rgb(128 200 238 / 5%);
+  padding-inline: 0.58rem;
+  color: #a9d9f2;
+  font-size: 0.66rem;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.ff-workspace-next-feedback:hover,
+.ff-workspace-next-feedback:focus-visible {
+  border-color: rgb(128 200 238 / 34%);
+  background: rgb(128 200 238 / 9%);
+  color: #d0efff;
+  outline: none;
+}
+
+.ff-workspace-next-feedback svg {
+  width: 0.85rem !important;
+  height: 0.85rem !important;
+}
+
+.ff-workspace-comment-more {
+  position: absolute;
+  top: 0.72rem;
+  right: 0.18rem;
+  z-index: 4;
+}
+
+.ff-workspace-comment-more > summary {
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  cursor: pointer;
+  place-items: center;
+  border-radius: 0.48rem;
+  color: #7f8893;
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  list-style: none;
+}
+
+.ff-workspace-comment-more > summary::-webkit-details-marker { display: none; }
+.ff-workspace-comment-more > summary:hover,
+.ff-workspace-comment-more > summary:focus-visible,
+.ff-workspace-comment-more[open] > summary { background: rgb(255 255 255 / 5%); color: #e2e6ea; outline: none; }
+
+.ff-workspace-comment-more-menu {
+  position: absolute;
+  top: calc(100% + 0.28rem);
+  right: 0;
+  z-index: 10;
+  display: grid;
+  min-width: 8.5rem;
+  gap: 0.12rem;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.62rem;
+  background: #111417;
+  padding: 0.28rem;
+  box-shadow: 0 14px 35px rgb(0 0 0 / 40%);
+}
+
+.ff-workspace-comment-more-menu button {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 0.42rem;
+  padding-inline: 0.52rem;
+  color: #b9c0c8;
+  font-size: 0.67rem;
+  font-weight: 650;
+  text-align: left;
+}
+
+.ff-workspace-comment-more-menu button:hover,
+.ff-workspace-comment-more-menu button:focus-visible { background: rgb(255 255 255 / 5%); color: white; outline: none; }
+.ff-workspace-comment-more-menu svg { width: 0.82rem !important; height: 0.82rem !important; }
+
+.ff-feedback-offline-note {
+  margin-top: 0.5rem;
+  color: #e4c880;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.ff-workspace-connection.is-reconnecting {
+  color: #f0cc7b;
+}
+
+.ff-workspace-connection.is-offline,
+.ff-workspace-connection.is-disconnected {
+  color: #c5cbd2;
+}
+
+@media (max-width: 1179px) {
+  .ff-workspace-next-feedback span { display: none; }
+  .ff-workspace-next-feedback { width: 2.08rem; padding: 0; justify-content: center; }
+}
+
+@media (max-width: 760px) {
+  .ff-workspace-has-tooltip::after,
+  .ff-workspace-mini-icon::after { display: none; }
+  .ff-workspace-comment-more { top: 0.78rem; right: 0.08rem; }
+}
+
+/* UX hardening 03 — quieter feedback chrome and instant interactions. */
+.ff-workspace-feedback-tabs {
+  min-height: 3.15rem;
+  gap: 0.9rem;
+  padding-inline: 0.72rem;
+}
+
+.ff-workspace-tablist {
+  gap: 0.62rem;
+}
+
+.ff-workspace-tab {
+  min-height: 3.15rem;
+  padding-inline: 0.32rem;
+  color: #8c96a2;
+  font-size: 0.76rem;
+  font-weight: 760;
+  letter-spacing: -0.005em;
+}
+
+.ff-workspace-tab:hover { color: #c4cbd2; }
+.ff-workspace-tab.is-active { color: #f3f5f7; }
+.ff-workspace-tab.is-active::after {
+  right: 0.32rem;
+  left: 0.32rem;
+  height: 2px;
+  background: #75ddb5;
+}
+
+.ff-workspace-feedback-tab-tools { gap: 0.48rem; }
+
+.ff-ai-brief-trigger {
+  width: 2.2rem;
+  min-width: 2.2rem;
+  height: 2.2rem;
+  padding-inline: 0;
+}
+
+.ff-ai-brief-trigger > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ff-ai-brief-trigger svg {
+  width: 1rem !important;
+  height: 1rem !important;
+}
+
+.ff-workspace-feedback-head {
+  padding: 0.72rem 0.72rem 0.62rem;
+}
+
+.ff-workspace-feedback-context {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.72rem;
+}
+
+.ff-workspace-feedback-file { min-width: 0; }
+.ff-workspace-feedback-file-line { gap: 0.2rem; }
+.ff-workspace-feedback-file-line h2 { font-size: 0.77rem; }
+.ff-workspace-feedback-file > p { margin-top: 0.12rem; font-size: 0.67rem; }
+.ff-workspace-feedback-add { flex: 0 0 auto; }
+
+.ff-workspace-comments-head {
+  min-height: 2.45rem;
+  margin-top: 0.48rem;
+  padding: 0.28rem 0.1rem 0.38rem;
+}
+
+.ff-workspace-comments-title,
+.ff-workspace-comments-tools {
+  display: flex;
+  align-items: center;
+}
+
+.ff-workspace-comments-title { gap: 0.38rem; }
+.ff-workspace-comments-tools { gap: 0.22rem; }
+
+.ff-workspace-comments-head .ff-workspace-mini-icon {
+  width: 1.9rem;
+  height: 1.9rem;
+  min-height: 1.9rem;
+}
+
+.ff-workspace-mini-icon.is-active {
+  background: rgb(79 209 161 / 10%);
+  color: #94e6c7;
+}
+
+.ff-workspace-comment-card.is-syncing {
+  /* Intentionally no spinner or opacity change: locally accepted feedback should
+     look final while server persistence settles in the background. */
+}
+
+@media (max-width: 760px) {
+  .ff-workspace-feedback-tabs { min-height: 3rem; padding-inline: 0.62rem; }
+  .ff-workspace-tab { min-height: 3rem; font-size: 0.74rem; }
+  .ff-workspace-feedback-context { gap: 0.5rem; }
+}

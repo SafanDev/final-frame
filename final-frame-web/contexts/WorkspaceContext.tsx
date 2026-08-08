@@ -26,6 +26,7 @@ import type {
 } from "@/lib/api/types";
 import { createRealtimeClient, getSocketErrorCode } from "@/lib/realtime/client";
 import { mergeAssetsByFreshness } from "@/lib/workspace/asset-merge-core";
+import { parseFeedbackDeepLink } from "@/lib/workspace/review-navigation";
 import { getAssetUploadMimeType } from "@/lib/assets/file-policy";
 import { clearRemoteCursors, publishRemoteCursor, removeRemoteCursor } from "@/lib/realtime/cursor-events";
 import {
@@ -81,7 +82,6 @@ interface WorkspaceDataContextType {
   project: WorkspaceProject | null;
   setProject: Dispatch<SetStateAction<WorkspaceProject | null>>;
   isLoading: boolean;
-  isRefreshing: boolean;
   workspaceIssue: WorkspaceIssue | null;
   realtimeStatus: RealtimeStatus;
   realtimeMessage: string;
@@ -274,7 +274,6 @@ export function WorkspaceProvider({
   const [project, setProject] = useState<WorkspaceProject | null>(null);
   const hasProject = Boolean(project);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [workspaceIssue, setWorkspaceIssue] = useState<WorkspaceIssue | null>(null);
   const [socket, setSocket] = useState<FinalFrameSocket | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>("connecting");
@@ -308,6 +307,7 @@ export function WorkspaceProvider({
   const pendingCursorRef = useRef<{ assetId: string; x: number; y: number } | null>(null);
   const cursorFrameRef = useRef<number | null>(null);
   const layoutModeRef = useRef<WorkspaceLayoutMode | null>(null);
+  const deepLinkAppliedRef = useRef<string | null>(null);
   const skipNextChromePersistRef = useRef(false);
   const sidebarPreferencesRef = useRef<Record<WorkspaceLayoutMode, { asset: boolean; feedback: boolean }>>({
     desktop: { asset: true, feedback: true },
@@ -381,9 +381,7 @@ export function WorkspaceProvider({
     const controller = new AbortController();
     loadAbortRef.current = controller;
 
-    const showRefreshIndicator = silent && reason !== "asset-processing-poll";
     if (!silent) setIsLoading(true);
-    else if (showRefreshIndicator) setIsRefreshing(true);
 
     try {
       const incomingProject = await loadWorkspace(projectId, controller.signal);
@@ -423,7 +421,6 @@ export function WorkspaceProvider({
     } finally {
       if (mountedRef.current && sequence === loadSequenceRef.current) {
         setIsLoading(false);
-        setIsRefreshing(false);
       }
     }
   }, [projectId]);
@@ -708,6 +705,29 @@ export function WorkspaceProvider({
 
 
   useEffect(() => {
+    if (!project || typeof window === "undefined") return;
+    const target = parseFeedbackDeepLink(window.location.search);
+    if (!target.assetId) return;
+    const key = `${target.assetId}:${target.commentId ?? ""}`;
+    if (deepLinkAppliedRef.current === key) return;
+    if (!project.assets.some((asset) => asset.id === target.assetId)) return;
+
+    deepLinkAppliedRef.current = key;
+    setActiveAssetId(target.assetId);
+    setActivePinId(target.commentId);
+    setRightSidebarTab("FEEDBACK");
+    const mode = currentWorkspaceLayoutMode();
+    if (mode === "mobile") {
+      sidebarPreferencesRef.current.mobile = { asset: false, feedback: false };
+      setIsAssetSidebarOpenState(false);
+      setIsFeedbackSidebarOpenState(false);
+    } else {
+      sidebarPreferencesRef.current[mode].feedback = true;
+      setIsFeedbackSidebarOpenState(true);
+    }
+  }, [project]);
+
+  useEffect(() => {
     if (!project) return;
     if (activeAssetId && project.assets.some((asset) => asset.id === activeAssetId)) {
       saveLastActiveAssetId(projectId, activeAssetId);
@@ -835,7 +855,6 @@ export function WorkspaceProvider({
     project,
     setProject,
     isLoading,
-    isRefreshing,
     workspaceIssue,
     realtimeStatus,
     realtimeMessage,
@@ -873,7 +892,6 @@ export function WorkspaceProvider({
     isLocked,
     isOnline,
     isOwner,
-    isRefreshing,
     localUploadPreview,
     project,
     projectId,

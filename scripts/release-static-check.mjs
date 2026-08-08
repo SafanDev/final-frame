@@ -595,6 +595,46 @@ assert(
     && text('final-frame-web/components/workspace/WorkspaceHeader.tsx').includes('aria-keyshortcuts="Enter Escape"'),
   'Owners can quickly rename the project or active file from the workspace header with keyboard-safe controls.',
 );
+assert(
+  text('final-frame-web/lib/workspace/review-navigation.ts').includes('buildFeedbackDeepLink')
+    && text('final-frame-web/contexts/WorkspaceContext.tsx').includes('parseFeedbackDeepLink')
+    && text('final-frame-web/components/feedback/CommentCard.tsx').includes('Feedback link copied.')
+    && text('final-frame-web/tests/unit/review-navigation.test.ts').includes('notification-style asset/comment links'),
+  'Individual feedback supports durable project/file deep links and clipboard sharing.',
+);
+assert(
+  text('final-frame-web/components/workspace/CanvasArea.tsx').includes('handleFileShortcut')
+    && text('final-frame-web/components/workspace/CanvasArea.tsx').includes('window.addEventListener("keydown", handleFileShortcut, true)')
+    && text('final-frame-web/components/workspace/FeedbackSidebar.tsx').includes('navigateOpenFeedback')
+    && text('final-frame-web/components/workspace/CanvasShortcuts.tsx').includes('J / K'),
+  'Review keyboard navigation changes files globally with Alt+Left/Right and cycles open feedback with J/K.',
+);
+assert(
+  text('final-frame-web/components/feedback/CommentComposer.tsx').includes('Offline — your text draft is safe.')
+    && text('final-frame-web/components/workspace/WorkspaceShell.tsx').includes('Reconnect to post, upload, or change review state.')
+    && text('final-frame-web/components/workspace/AssetSidebar.tsx').includes('canStartUpload = canUpload && isOnline'),
+  'Offline review keeps recoverable drafts available while server-backed mutations are clearly gated.',
+);
+assert(
+  text('final-frame-web/components/feedback/CommentComposer.tsx').includes('buildOptimisticComment')
+    && text('final-frame-web/components/workspace/CanvasArea.tsx').includes('handleOptimisticSettled')
+    && text('final-frame-web/lib/workspace/state.ts').includes('replaceWorkspaceComment')
+    && text('final-frame-web/tests/unit/optimistic-feedback.test.ts').includes('immediately renderable text comment'),
+  'Text feedback and pins render immediately while server persistence settles in the background with rollback support.',
+);
+assert(
+  !text('final-frame-web/components/workspace/WorkspaceHeader.tsx').includes('ff-workspace-refresh-dot')
+    && !text('final-frame-web/contexts/WorkspaceContext.tsx').includes('setIsRefreshing')
+    && text('final-frame-web/components/workspace/AssetSidebar.tsx').includes('processingStatus: "PROCESSING"'),
+  'Background workspace reconciliation stays visually silent while retry and final-file actions update locally first.',
+);
+assert(
+  text('final-frame-web/components/feedback/CommentDeleteDialog.tsx').includes('onDeleted(target)')
+    && text('final-frame-web/components/feedback/CommentDeleteDialog.tsx').includes('onFailed(target')
+    && text('final-frame-web/components/feedback/CommentCard.tsx').includes('onUpdated(optimistic, false)')
+    && text('final-frame-web/components/feedback/CommentCard.tsx').includes('onResolved(comment.assetId, comment.id, next, false)'),
+  'High-frequency feedback edit, resolution, and deletion interactions update immediately and roll back failed mutations.',
+);
 
 assert(
   text('final-frame-web/components/AuthProvider.tsx').includes('UserPreferencesProvider')

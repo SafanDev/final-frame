@@ -6,11 +6,12 @@ import VoiceRecorderControl, { type VoiceRecordingValue } from "@/components/fee
 import { createComment } from "@/lib/api/comments";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
 import { uploadVoiceNote, type UploadProgress } from "@/lib/api/uploads";
-import type { ProjectComment } from "@/lib/api/types";
+import type { BasicUser, ProjectComment } from "@/lib/api/types";
 import { resolveFeedbackAnchor } from "@/lib/feedback/anchor-core";
 import { shouldSubmitFeedbackOnKeyDown } from "@/lib/feedback/keyboard";
 import { composeFeedbackText } from "@/lib/feedback/transcript";
 import { clearFeedbackDraft, loadFeedbackDraft, saveFeedbackDraft, type FeedbackDraftKind } from "@/lib/workspace/review-session";
+import { buildOptimisticComment } from "@/lib/workspace/optimistic-feedback";
 
 interface CommentLocation {
   x: number;
@@ -21,6 +22,7 @@ interface CommentComposerProps {
   projectId: string;
   assetId: string;
   currentUserId: string;
+  currentUser?: BasicUser | null;
   location?: CommentLocation | null;
   pageNumber?: number | null;
   lineStart?: number | null;
@@ -29,12 +31,16 @@ interface CommentComposerProps {
   columnEnd?: number | null;
   timestamp?: number | null;
   disabled?: boolean;
+  isOnline?: boolean;
   autoFocus?: boolean;
   title?: string;
   placeholder?: string;
   submitLabel?: string;
   compact?: boolean;
   onCreated: (comment: ProjectComment) => void;
+  onOptimisticCreated?: (comment: ProjectComment) => void;
+  onOptimisticSettled?: (temporaryId: string, comment: ProjectComment) => void;
+  onOptimisticFailed?: (comment: ProjectComment, error: { message: string; requestId: string | null }) => void;
   onSubmitStart?: () => void;
   onSubmitError?: () => void;
   onCancel?: () => void;
@@ -52,6 +58,7 @@ export default function CommentComposer({
   projectId,
   assetId,
   currentUserId,
+  currentUser = null,
   location = null,
   pageNumber = null,
   lineStart = null,
@@ -60,12 +67,16 @@ export default function CommentComposer({
   columnEnd = null,
   timestamp = null,
   disabled = false,
+  isOnline = true,
   autoFocus = false,
   title = "Add feedback",
   placeholder = "What should change?",
   submitLabel = "Post",
   compact = false,
   onCreated,
+  onOptimisticCreated,
+  onOptimisticSettled,
+  onOptimisticFailed,
   onSubmitStart,
   onSubmitError,
   onCancel,
@@ -90,7 +101,7 @@ export default function CommentComposer({
   const finalText = composeFeedbackText(text, "", Boolean(audioBlob));
   const exceedsTextLimit = finalText.length > 5_000;
   const showCharacterCount = finalText.length >= 4_500 || exceedsTextLimit;
-  const canSubmit = !disabled && !isSubmitting && !exceedsTextLimit && (finalText.length > 0 || Boolean(audioBlob));
+  const canSubmit = isOnline && !disabled && !isSubmitting && !exceedsTextLimit && (finalText.length > 0 || Boolean(audioBlob));
   const hasAnchor = Boolean(location || timestamp !== null || pageNumber !== null || lineStart !== null);
   const draftKind: FeedbackDraftKind = hasAnchor ? "pinned" : "general";
   const anchorLabel = timestamp !== null
@@ -129,6 +140,51 @@ export default function CommentComposer({
     event.preventDefault();
     if (!canSubmit) return;
 
+    const anchor = resolveFeedbackAnchor({
+      location,
+      pageNumber,
+      lineStart,
+      lineEnd,
+      columnStart,
+      columnEnd,
+      timestamp,
+    });
+
+    // Text-only feedback is safe to render immediately. Persist it in the
+    // background so placing one pin never blocks the next review action. Voice
+    // notes still use the blocking path because the audio must be uploaded
+    // securely before the comment can reference it.
+    if (!audioBlob && onOptimisticCreated && onOptimisticSettled && onOptimisticFailed) {
+      const optimistic = buildOptimisticComment({
+        assetId,
+        authorId: currentUserId,
+        author: currentUser ?? { id: currentUserId, name: "You" },
+        text: finalText,
+        anchor,
+      });
+      const draftText = text;
+      setError(null);
+      onOptimisticCreated(optimistic);
+      resetComposer();
+
+      void createComment(projectId, assetId, {
+        text: finalText,
+        ...anchor,
+        audioKey: null,
+      }).then((comment) => {
+        onOptimisticSettled(optimistic.id, comment);
+      }).catch((caught) => {
+        const normalized = normalizeApiError(caught);
+        const failure = {
+          message: getUserFacingErrorMessage(caught, "The feedback could not be saved."),
+          requestId: normalized.requestId,
+        };
+        saveFeedbackDraft(currentUserId, projectId, assetId, draftKind, draftText);
+        onOptimisticFailed(optimistic, failure);
+      });
+      return;
+    }
+
     onSubmitStart?.();
     controllerRef.current?.abort();
     const controller = new AbortController();
@@ -146,15 +202,6 @@ export default function CommentComposer({
       }
 
       setStage("saving-comment");
-      const anchor = resolveFeedbackAnchor({
-        location,
-        pageNumber,
-        lineStart,
-        lineEnd,
-        columnStart,
-        columnEnd,
-        timestamp,
-      });
       const comment = await createComment(projectId, assetId, {
         text: finalText,
         ...anchor,
@@ -248,6 +295,7 @@ export default function CommentComposer({
       </div>
 
       {exceedsTextLimit ? <InlineAlert tone="warning" title="Feedback is too long" className="mt-3">Shorten the note to stay within 5,000 characters.</InlineAlert> : null}
+      {!isOnline && (finalText.length > 0 || Boolean(audioBlob)) ? <p role="status" className="ff-feedback-offline-note">Offline — your text draft is safe. Reconnect to post.</p> : null}
 
       {stage === "uploading-audio" ? (
         <div role="status" className="ff-feedback-upload-status">
@@ -262,7 +310,7 @@ export default function CommentComposer({
         {onCancel ? (
           <button type="button" onClick={handleCancel} disabled={isSubmitting} aria-keyshortcuts="Escape" title="Cancel (Esc)" className="ff-feedback-composer-cancel">Cancel</button>
         ) : null}
-        <button type="submit" disabled={!canSubmit} aria-keyshortcuts="Enter" title={`${submitLabel} (Enter)`} className="ff-feedback-composer-submit">
+        <button type="submit" disabled={!canSubmit} aria-keyshortcuts="Enter" title={isOnline ? `${submitLabel} (Enter)` : "Reconnect to post"} className="ff-feedback-composer-submit">
           {isSubmitting ? "Saving…" : submitLabel}
         </button>
       </div>

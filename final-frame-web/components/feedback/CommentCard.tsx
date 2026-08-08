@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { toast } from "sonner";
 import VoiceNotePlayer from "@/components/feedback/VoiceNotePlayer";
 import InlineAlert from "@/components/ui/InlineAlert";
 import WorkspaceIcon from "@/components/workspace/WorkspaceIcon";
@@ -10,6 +11,9 @@ import type { ProjectComment } from "@/lib/api/types";
 import { composeFeedbackText, splitFeedbackText } from "@/lib/feedback/transcript";
 import { useUserPreferences } from "@/contexts/UserPreferencesContext";
 import { formatDateTime } from "@/lib/utils/format";
+import { copyTextToClipboard } from "@/lib/utils/clipboard";
+import { buildFeedbackDeepLink } from "@/lib/workspace/review-navigation";
+import { isOptimisticComment } from "@/lib/workspace/optimistic-feedback";
 
 interface CommentCardProps {
   projectId: string;
@@ -17,16 +21,17 @@ interface CommentCardProps {
   currentUserId: string | null;
   comment: ProjectComment;
   isLocked: boolean;
+  isOnline: boolean;
   isActive: boolean;
   onActivate: (comment: ProjectComment) => void;
   onUpdated: (comment: ProjectComment) => void;
-  onResolved: (assetId: string, commentId: string, isResolved: boolean) => void;
+  onResolved: (assetId: string, commentId: string, isResolved: boolean, announce?: boolean) => void;
   onRequestDelete: (comment: ProjectComment) => void;
 }
 
 
 function isInteractiveTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest("button, a, input, textarea, select, audio"));
+  return target instanceof Element && Boolean(target.closest("button, a, input, textarea, select, audio, summary"));
 }
 
 function formatVideoTime(seconds: number): string {
@@ -41,6 +46,7 @@ export default function CommentCard({
   currentUserId,
   comment,
   isLocked,
+  isOnline,
   isActive,
   onActivate,
   onUpdated,
@@ -49,6 +55,7 @@ export default function CommentCard({
 }: CommentCardProps) {
   const preferences = useUserPreferences();
   const editInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const utilityMenuRef = useRef<HTMLDetailsElement | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(() => splitFeedbackText(comment.text).note);
   const [isSaving, setIsSaving] = useState(false);
@@ -58,7 +65,8 @@ export default function CommentCard({
   const isOwner = currentUserId === ownerId;
   const isAuthor = currentUserId === comment.authorId;
   const isDesignerComment = comment.authorId === ownerId;
-  const canDelete = !isLocked && isAuthor;
+  const isPendingPersistence = isOptimisticComment(comment);
+  const canDelete = !isLocked && isAuthor && !isPendingPersistence;
   const hasLocation = comment.xPos !== null && comment.yPos !== null;
   const hasAnchor = comment.anchorType !== "GENERAL";
   const anchorLabel = comment.timestamp !== null
@@ -84,6 +92,10 @@ export default function CommentCard({
 
   async function saveEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!isOnline) {
+      toast.error("Reconnect to update feedback.");
+      return;
+    }
     const nextText = editedText;
     if (isSaving || nextText === comment.text || (!nextText && !comment.hasAudio)) {
       setIsEditing(false);
@@ -92,11 +104,18 @@ export default function CommentCard({
 
     setIsSaving(true);
     setError(null);
+    const previous = comment;
+    const now = new Date().toISOString();
+    const optimistic = { ...comment, text: nextText, editedAt: now, updatedAt: now };
+    onUpdated(optimistic);
+    setIsEditing(false);
     try {
       const updated = await updateComment(projectId, comment.assetId, comment.id, nextText);
       onUpdated(updated);
-      setIsEditing(false);
     } catch (caught) {
+      onUpdated(previous);
+      setEditText(splitFeedbackText(previous.text).note);
+      setIsEditing(true);
       const normalized = normalizeApiError(caught);
       setError({
         message: getUserFacingErrorMessage(caught, "The feedback could not be updated."),
@@ -109,13 +128,20 @@ export default function CommentCard({
 
   async function toggleResolved() {
     if (!isOwner || isLocked || isResolving) return;
+    if (!isOnline) {
+      toast.error("Reconnect to change feedback status.");
+      return;
+    }
     setIsResolving(true);
     setError(null);
-    const next = !comment.isResolved;
+    const previous = comment.isResolved;
+    const next = !previous;
+    onResolved(comment.assetId, comment.id, next, false);
     try {
       await setCommentResolved(projectId, comment.assetId, comment.id, next);
-      onResolved(comment.assetId, comment.id, next);
+      onResolved(comment.assetId, comment.id, next, true);
     } catch (caught) {
+      onResolved(comment.assetId, comment.id, previous, false);
       const normalized = normalizeApiError(caught);
       setError({
         message: getUserFacingErrorMessage(caught, "The feedback status could not be changed."),
@@ -126,12 +152,32 @@ export default function CommentCard({
     }
   }
 
+  async function copyFeedbackLink() {
+    try {
+      await copyTextToClipboard(buildFeedbackDeepLink(window.location.href, comment.assetId, comment.id));
+      utilityMenuRef.current?.removeAttribute("open");
+      toast.success("Feedback link copied.");
+    } catch {
+      toast.error("Could not copy the feedback link.");
+    }
+  }
+
+  async function copyFeedbackText() {
+    try {
+      await copyTextToClipboard(comment.text);
+      utilityMenuRef.current?.removeAttribute("open");
+      toast.success("Feedback copied.");
+    } catch {
+      toast.error("Could not copy the feedback.");
+    }
+  }
+
   return (
     <article
       id={`comment-${comment.id}`}
       data-feedback-selection={comment.id}
       onClick={(event) => { if (hasAnchor && !isInteractiveTarget(event.target)) onActivate(comment); }}
-      className={`ff-workspace-comment-card ${isActive ? "is-active" : ""} ${hasAnchor ? "is-anchored" : ""}`}
+      className={`ff-workspace-comment-card ${isActive ? "is-active" : ""} ${hasAnchor ? "is-anchored" : ""} ${isPendingPersistence ? "is-syncing" : ""}`}
     >
       <div className="ff-workspace-comment-head">
         <button
@@ -158,6 +204,16 @@ export default function CommentCard({
         </div>
       </div>
 
+      {!isPendingPersistence ? (
+        <details ref={utilityMenuRef} className="ff-workspace-comment-more" data-pin-ignore="true">
+          <summary aria-label="Feedback options" data-tooltip="Feedback options">•••</summary>
+          <div className="ff-workspace-comment-more-menu" role="menu">
+            <button type="button" role="menuitem" onClick={() => void copyFeedbackLink()}><WorkspaceIcon name="link" />Copy link</button>
+            <button type="button" role="menuitem" onClick={() => void copyFeedbackText()}><WorkspaceIcon name="copy" />Copy text</button>
+          </div>
+        </details>
+      ) : null}
+
       {isEditing ? (
         <form onSubmit={saveEdit} className="mt-4">
           <label htmlFor={`edit-${comment.id}`} className="sr-only">Edit feedback</label>
@@ -173,7 +229,7 @@ export default function CommentCard({
           />
           <div className="mt-2 flex justify-end gap-2">
             <button type="button" onClick={() => { setIsEditing(false); setEditText(splitFeedbackText(comment.text).note); setError(null); }} disabled={isSaving} className="min-h-9 rounded-lg border border-white/10 px-3 text-xs font-semibold text-zinc-300 hover:bg-white/5 disabled:opacity-50">Cancel</button>
-            <button type="submit" disabled={isSaving || editedText === comment.text || editedText.length > 5_000 || (!editText.trim() && !comment.hasAudio)} className="min-h-9 rounded-lg bg-emerald-400 px-3 text-xs font-bold text-zinc-950 hover:bg-emerald-300 disabled:opacity-45">{isSaving ? "Saving…" : "Save"}</button>
+            <button type="submit" disabled={isSaving || editedText === comment.text || editedText.length > 5_000 || (!editText.trim() && !comment.hasAudio)} className="min-h-9 rounded-lg bg-emerald-400 px-3 text-xs font-bold text-zinc-950 hover:bg-emerald-300 disabled:opacity-45">Save</button>
           </div>
         </form>
       ) : (
@@ -197,11 +253,11 @@ export default function CommentCard({
 
       {error ? <InlineAlert tone="error" title="Feedback action failed" requestId={error.requestId} className="mt-3">{error.message}</InlineAlert> : null}
 
-      {!isEditing && !isLocked && (isAuthor || isOwner) ? (
+      {!isPendingPersistence && !isEditing && !isLocked && (isAuthor || isOwner) ? (
         <div className="ff-workspace-comment-actions">
-          {isAuthor ? <button type="button" onClick={() => { setIsEditing(true); setError(null); }} className="ff-workspace-comment-action"><WorkspaceIcon name="edit" /><span>Edit</span></button> : null}
-          {isOwner ? <button type="button" onClick={() => void toggleResolved()} disabled={isResolving} className="ff-workspace-comment-action"><WorkspaceIcon name={comment.isResolved ? "revision" : "approve"} /><span>{isResolving ? "Updating…" : comment.isResolved ? "Reopen" : "Resolve"}</span></button> : null}
-          {canDelete ? <button type="button" onClick={() => onRequestDelete(comment)} className="ff-workspace-comment-action is-danger"><WorkspaceIcon name="trash" /><span>Delete</span></button> : null}
+          {isAuthor ? <button type="button" onClick={() => { if (!isOnline) { toast.error("Reconnect to edit feedback."); return; } setIsEditing(true); setError(null); }} disabled={isSaving || !isOnline} title={!isOnline ? "Reconnect to edit" : undefined} className="ff-workspace-comment-action"><WorkspaceIcon name="edit" /><span>Edit</span></button> : null}
+          {isOwner ? <button type="button" onClick={() => void toggleResolved()} disabled={isResolving || !isOnline} title={!isOnline ? "Reconnect to update status" : undefined} className="ff-workspace-comment-action"><WorkspaceIcon name={comment.isResolved ? "revision" : "approve"} /><span>{comment.isResolved ? "Reopen" : "Resolve"}</span></button> : null}
+          {canDelete ? <button type="button" onClick={() => { if (!isOnline) { toast.error("Reconnect to delete feedback."); return; } onRequestDelete(comment); }} disabled={!isOnline} title={!isOnline ? "Reconnect to delete" : undefined} className="ff-workspace-comment-action is-danger"><WorkspaceIcon name="trash" /><span>Delete</span></button> : null}
         </div>
       ) : null}
     </article>

@@ -16,7 +16,7 @@ import { useUserPreferences } from "@/contexts/UserPreferencesContext";
 import { listAssets, retryAssetProcessing } from "@/lib/api/assets";
 import { selectFinalAsset } from "@/lib/api/projects";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
-import type { AssetMutationResponse, DeleteAssetScope, ProjectAsset } from "@/lib/api/types";
+import type { AssetMutationResponse, AssetRenameResponse, DeleteAssetResponse, DeleteAssetScope, ProjectAsset } from "@/lib/api/types";
 import { ASSET_FILE_ACCEPT, formatFileSize, getAssetCategory, validateAssetFile, type AssetCategory } from "@/lib/assets/file-policy";
 import { formatRelativeDate } from "@/lib/utils/format";
 import { mergeAssetsByFreshness } from "@/lib/workspace/asset-merge-core";
@@ -36,7 +36,7 @@ const categoryLabels: Readonly<Record<AssetCategory | "all", string>> = {
 export default function AssetSidebar() {
   const preferences = useUserPreferences();
   const {
-    projectId, project, setProject, isOwner, isLocked, activeAssetId,
+    projectId, project, setProject, isOwner, isLocked, isOnline, activeAssetId,
     setActiveAssetId, assetStacks, fetchProjectDetails,
     beginLocalUploadPreview, bindLocalUploadPreview, clearLocalUploadPreview,
   } = useWorkspaceData();
@@ -79,6 +79,7 @@ export default function AssetSidebar() {
   const hasMoreAssets = project?.pageInfo.assets.hasMore ?? false;
   const canDownload = Boolean(isOwner || project?.isDownloadUnlocked);
   const canUpload = Boolean(isOwner && !isLocked);
+  const canStartUpload = canUpload && isOnline;
 
   useEffect(() => {
     projectVersionRef.current = project?.version ?? projectVersionRef.current;
@@ -183,27 +184,27 @@ export default function AssetSidebar() {
   }
 
   function handleDragEnter(event: DragEvent<HTMLElement>) {
-    if (!canUpload || !event.dataTransfer.types.includes("Files")) return;
+    if (!canStartUpload || !event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
     dragDepthRef.current += 1;
     setIsDraggingFiles(true);
   }
 
   function handleDragOver(event: DragEvent<HTMLElement>) {
-    if (!canUpload || !event.dataTransfer.types.includes("Files")) return;
+    if (!canStartUpload || !event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
   }
 
   function handleDragLeave(event: DragEvent<HTMLElement>) {
-    if (!canUpload) return;
+    if (!canStartUpload) return;
     event.preventDefault();
     dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
     if (dragDepthRef.current === 0) setIsDraggingFiles(false);
   }
 
   function handleDrop(event: DragEvent<HTMLElement>) {
-    if (!canUpload) return;
+    if (!canStartUpload) return;
     event.preventDefault();
     dragDepthRef.current = 0;
     setIsDraggingFiles(false);
@@ -240,13 +241,23 @@ export default function AssetSidebar() {
 
   async function handleRetryProcessing(asset: ProjectAsset) {
     if (!project || retryingAssetId) return;
+    const expectedVersion = project.version;
     setRetryingAssetId(asset.id);
+    setProject((current) => current ? {
+      ...current,
+      assets: current.assets.map((candidate) => candidate.id === asset.id
+        ? { ...candidate, processingStatus: "PROCESSING", processingError: null }
+        : candidate),
+    } : current);
     try {
-      const result = await retryAssetProcessing(projectId, asset.id, project.version);
+      const result = await retryAssetProcessing(projectId, asset.id, expectedVersion);
       setProject((current) => current ? { ...current, version: result.projectVersion ?? current.version } : current);
-      await fetchProjectDetails(true);
       toast.success("File preparation queued again.");
     } catch (caught) {
+      setProject((current) => current ? {
+        ...current,
+        assets: current.assets.map((candidate) => candidate.id === asset.id ? asset : candidate),
+      } : current);
       toast.error(getUserFacingErrorMessage(caught, "File preparation could not be retried."));
     } finally {
       setRetryingAssetId(null);
@@ -255,10 +266,13 @@ export default function AssetSidebar() {
 
   async function handleSelectFinalAsset(asset: ProjectAsset) {
     if (!project || selectingFinalAssetId || asset.processingStatus !== "CLEAN") return;
+    const previousFinalAssetId = project.finalAssetId ?? null;
+    const nextAssetId = previousFinalAssetId === asset.id ? null : asset.id;
+    const expectedVersion = project.version;
     setSelectingFinalAssetId(asset.id);
+    setProject((current) => current ? { ...current, finalAssetId: nextAssetId } : current);
     try {
-      const nextAssetId = project.finalAssetId === asset.id ? null : asset.id;
-      const result = await selectFinalAsset(projectId, nextAssetId, project.version);
+      const result = await selectFinalAsset(projectId, nextAssetId, expectedVersion);
       setProject((current) => current ? {
         ...current,
         version: result.version,
@@ -266,9 +280,10 @@ export default function AssetSidebar() {
       } : current);
       toast.success(nextAssetId ? `Version ${asset.version} selected for review.` : "Final review file cleared.");
     } catch (caught) {
+      setProject((current) => current ? { ...current, finalAssetId: previousFinalAssetId } : current);
       const normalized = normalizeApiError(caught);
       if (normalized.code === "CONFLICT" || normalized.code === "TRANSACTION_CONFLICT") {
-        await fetchProjectDetails(true);
+        void fetchProjectDetails(true);
       }
       toast.error(getUserFacingErrorMessage(caught, "The final review file could not be changed."));
     } finally {
@@ -299,12 +314,19 @@ export default function AssetSidebar() {
     }
   }
 
-  async function handleRenamed() {
-    await fetchProjectDetails(true);
+  function handleRenamed(result: AssetRenameResponse, asset: ProjectAsset) {
+    projectVersionRef.current = result.projectVersion;
+    setProject((current) => current ? {
+      ...current,
+      version: result.projectVersion,
+      assets: current.assets.map((candidate) => candidate.stackKey === asset.stackKey
+        ? { ...candidate, fileName: result.fileName }
+        : candidate),
+    } : current);
     toast.success("File stack renamed.");
   }
 
-  async function handleDeleted(scope: DeleteAssetScope, asset: ProjectAsset) {
+  function handleDeleted(scope: DeleteAssetScope, asset: ProjectAsset, result: DeleteAssetResponse) {
     const deletedAt = Date.now();
     deletedAssetTombstonesRef.current.set(asset.id, deletedAt);
     if (scope === "stack") {
@@ -325,7 +347,7 @@ export default function AssetSidebar() {
       const remaining = current.assets.filter((candidate) => scope === "stack"
         ? candidate.stackKey !== asset.stackKey
         : candidate.id !== asset.id);
-      return { ...current, assets: remaining };
+      return { ...current, version: result.projectVersion, assets: remaining };
     });
 
     if (scope === "stack" || activeAssetId === asset.id) {
@@ -336,7 +358,7 @@ export default function AssetSidebar() {
       setIsCompareMode(false);
     }
 
-    await fetchProjectDetails(true);
+    projectVersionRef.current = result.projectVersion;
     toast.success(scope === "stack" ? "File stack deleted." : `Version ${asset.version} deleted.`);
   }
 
@@ -366,7 +388,7 @@ export default function AssetSidebar() {
         <div className="ff-workspace-panel-title-row">
           <div className="ff-workspace-panel-title-copy"><h2>Files</h2><span>{totalStackCount}</span></div>
           <div className="flex items-center gap-1.5">
-            {canUpload ? <Button size="sm" variant="primary" className="ff-workspace-upload-button" onClick={() => fileInputRef.current?.click()} disabled={upload.isUploading}><span aria-hidden="true">＋</span> Upload</Button> : null}
+            {canUpload ? <Button size="sm" variant="primary" className="ff-workspace-upload-button" onClick={() => fileInputRef.current?.click()} disabled={upload.isUploading || !isOnline} title={!isOnline ? "Reconnect to upload" : "Upload files"}><span aria-hidden="true">＋</span> Upload</Button> : null}
             <Button size="icon" variant="ghost" className="ff-workspace-mobile-close lg:hidden" onClick={() => setIsAssetSidebarOpen(false)} aria-label="Close files panel">×</Button>
           </div>
         </div>
@@ -419,7 +441,7 @@ export default function AssetSidebar() {
                         {stack.map((asset, index) => (
                           <li key={asset.id} className={`ff-workspace-version-row ${asset.id === activeAssetId ? "is-active" : ""}`}>
                             <button type="button" onMouseEnter={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onPointerDown={() => { if (asset.processingStatus === "CLEAN") prefetchAssetUrl(asset.id); }} onFocus={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onClick={() => { setActiveAssetId(asset.id); setIsCompareMode(false); closeMobileSidebars(); }} title={`${asset.fileName} version ${asset.version}`} aria-label={`Open ${asset.fileName}, version ${asset.version}`} className="ff-workspace-version-main"><span>v{asset.version}{index === 0 ? " · Latest" : ""}</span><small>{formatRelativeDate(asset.updatedAt, preferences)} · {formatFileSize(asset.fileSize)} · {asset.processingStatus === "CLEAN" ? "Ready" : asset.processingStatus === "REJECTED" ? "Failed" : "Preparing"}</small></button>
-                            {asset.processingStatus === "REJECTED" && isOwner && !isLocked ? <button type="button" onClick={() => void handleRetryProcessing(asset)} disabled={retryingAssetId !== null} className="ff-workspace-version-action is-warning">{retryingAssetId === asset.id ? "Retrying…" : "Retry"}</button> : null}
+                            {asset.processingStatus === "REJECTED" && isOwner && !isLocked ? <button type="button" onClick={() => void handleRetryProcessing(asset)} disabled={retryingAssetId !== null} className="ff-workspace-version-action is-warning">Retry</button> : null}
                             {isOwner && !isLocked && asset.processingStatus === "CLEAN" ? (
                               <button
                                 type="button"
@@ -428,7 +450,7 @@ export default function AssetSidebar() {
                                 aria-pressed={project?.finalAssetId === asset.id}
                                 className={`ff-workspace-version-action ${project?.finalAssetId === asset.id ? "is-final" : ""}`}
                               >
-                                {selectingFinalAssetId === asset.id ? "Saving…" : project?.finalAssetId === asset.id ? "Final" : "Set final"}
+                                {project?.finalAssetId === asset.id ? "Final" : "Set final"}
                               </button>
                             ) : project?.finalAssetId === asset.id ? <span className="ff-workspace-version-final">Final</span> : null}
                             {canDownload && asset.processingStatus === "CLEAN" ? <AssetDownloadButton assetId={asset.id} fileName={asset.fileName} compact /> : null}

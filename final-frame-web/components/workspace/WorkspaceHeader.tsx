@@ -18,6 +18,8 @@ import PresenceList from "@/components/workspace/PresenceList";
 import { useWorkspaceData, useWorkspaceUI } from "@/contexts/WorkspaceContext";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
 import { normalizeAssetFileName } from "@/lib/assets/file-policy";
+import { copyTextToClipboard } from "@/lib/utils/clipboard";
+import { buildProjectLink } from "@/lib/workspace/review-navigation";
 import {
   downloadApprovalCertificate,
   downloadProjectAudit,
@@ -61,7 +63,7 @@ export default function WorkspaceHeader() {
     activeUsers,
     realtimeStatus,
     realtimeMessage,
-    isRefreshing,
+    isOnline,
     refreshWorkspace,
   } = useWorkspaceData();
   const {
@@ -147,6 +149,7 @@ export default function WorkspaceHeader() {
 
   function startTitleRename() {
     if (!canQuickRename || isTitleSaving) return;
+    if (!isOnline) { toast.error("Reconnect to rename the project."); return; }
     setTitleDraft(currentProject.title);
     setIsRenamingTitle(true);
   }
@@ -160,22 +163,27 @@ export default function WorkspaceHeader() {
   async function saveTitleRename(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     if (!canQuickRename || isTitleSaving) return;
+    if (!isOnline) { toast.error("Reconnect to rename the project."); return; }
     const nextTitle = titleDraft.trim();
     if (!nextTitle || nextTitle === currentProject.title) {
       cancelTitleRename();
       return;
     }
 
+    const previousTitle = currentProject.title;
+    const expectedVersion = currentProject.version;
     setIsTitleSaving(true);
+    setProject((current) => current ? { ...current, title: nextTitle } : current);
+    setIsRenamingTitle(false);
+    setTitleDraft("");
     try {
-      const updated = await updateProject(projectId, { title: nextTitle, expectedVersion: currentProject.version });
+      const updated = await updateProject(projectId, { title: nextTitle, expectedVersion });
       setProject((current) => current ? { ...current, ...updated } : current);
-      setIsRenamingTitle(false);
-      setTitleDraft("");
       toast.success("Project renamed.");
     } catch (caught) {
+      setProject((current) => current && current.title === nextTitle ? { ...current, title: previousTitle } : current);
       const normalized = normalizeApiError(caught);
-      if (normalized.status === 409) await refreshWorkspace("title-conflict", true);
+      if (normalized.status === 409) void refreshWorkspace("title-conflict", true);
       toast.error(getUserFacingErrorMessage(caught, "The project name could not be changed."));
     } finally {
       setIsTitleSaving(false);
@@ -190,6 +198,7 @@ export default function WorkspaceHeader() {
 
   function startFileRename() {
     if (!canQuickRenameFile || !activeAsset || isFileSaving) return;
+    if (!isOnline) { toast.error("Reconnect to rename the file."); return; }
     setFileDraft(activeAsset.fileName);
     setIsRenamingFile(true);
   }
@@ -203,6 +212,7 @@ export default function WorkspaceHeader() {
   async function saveFileRename(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     if (!canQuickRenameFile || !activeAsset || isFileSaving) return;
+    if (!isOnline) { toast.error("Reconnect to rename the file."); return; }
     const nextFileName = normalizeAssetFileName(fileDraft);
     if (!nextFileName) {
       toast.error("Enter a valid file name.");
@@ -214,9 +224,24 @@ export default function WorkspaceHeader() {
     }
 
     const targetStackKey = activeAsset.stackKey;
+    const previousFileName = activeAsset.fileName;
+    const expectedVersion = currentProject.version;
     setIsFileSaving(true);
+    setProject((current) => {
+      if (!current) return current;
+      const renamedAssetIds = new Set(current.assets.filter((asset) => asset.stackKey === targetStackKey).map((asset) => asset.id));
+      return {
+        ...current,
+        assets: current.assets.map((asset) => asset.stackKey === targetStackKey ? { ...asset, fileName: nextFileName } : asset),
+        finalAsset: current.finalAsset && renamedAssetIds.has(current.finalAsset.id)
+          ? { ...current.finalAsset, fileName: nextFileName }
+          : current.finalAsset,
+      };
+    });
+    setIsRenamingFile(false);
+    setFileDraft("");
     try {
-      const result = await renameAssetStack(projectId, activeAsset.id, nextFileName, currentProject.version);
+      const result = await renameAssetStack(projectId, activeAsset.id, nextFileName, expectedVersion);
       setProject((current) => {
         if (!current) return current;
         const renamedAssetIds = new Set(current.assets.filter((asset) => asset.stackKey === targetStackKey).map((asset) => asset.id));
@@ -229,12 +254,21 @@ export default function WorkspaceHeader() {
             : current.finalAsset,
         };
       });
-      setIsRenamingFile(false);
-      setFileDraft("");
       toast.success("File renamed.");
     } catch (caught) {
+      setProject((current) => {
+        if (!current) return current;
+        const renamedAssetIds = new Set(current.assets.filter((asset) => asset.stackKey === targetStackKey).map((asset) => asset.id));
+        return {
+          ...current,
+          assets: current.assets.map((asset) => asset.stackKey === targetStackKey && asset.fileName === nextFileName ? { ...asset, fileName: previousFileName } : asset),
+          finalAsset: current.finalAsset && renamedAssetIds.has(current.finalAsset.id) && current.finalAsset.fileName === nextFileName
+            ? { ...current.finalAsset, fileName: previousFileName }
+            : current.finalAsset,
+        };
+      });
       const normalized = normalizeApiError(caught);
-      if (normalized.status === 409) await refreshWorkspace("file-rename-conflict", true);
+      if (normalized.status === 409) void refreshWorkspace("file-rename-conflict", true);
       toast.error(getUserFacingErrorMessage(caught, "The file could not be renamed."));
     } finally {
       setIsFileSaving(false);
@@ -251,15 +285,17 @@ export default function WorkspaceHeader() {
     input: ConfirmAction["input"] & { title?: string; description?: string | null },
     successMessage: string,
   ) {
+    if (!isOnline) { toast.error("Reconnect to update the project."); return; }
     setIsMutating(true);
     try {
       if (input.status) {
-        await transitionProjectReview(projectId, {
+        const updated = await transitionProjectReview(projectId, {
           status: input.status,
           ...(input.status === "CHANGES_REQUESTED" ? { reason: revisionReason.trim() } : {}),
           expectedVersion: currentProject.version,
         });
-        await refreshWorkspace("project-updated", true);
+        setProject((current) => current ? { ...current, ...updated } : current);
+        void refreshWorkspace("project-updated", true);
       } else {
         const projectFields = {
           ...(input.title !== undefined ? { title: input.title } : {}),
@@ -295,6 +331,7 @@ export default function WorkspaceHeader() {
   }
 
   function requestStatus(status: ProjectStatus) {
+    if (!isOnline) { toast.error("Reconnect to change review state."); return; }
     const approved = status === "APPROVED";
     const revision = status === "CHANGES_REQUESTED";
     const withdrawing = status === "DRAFT";
@@ -324,6 +361,16 @@ export default function WorkspaceHeader() {
       input: { status },
     });
     setIsControlsOpen(false);
+  }
+
+  async function copyProjectLink() {
+    try {
+      await copyTextToClipboard(buildProjectLink(window.location.href));
+      toast.success("Project link copied.");
+      setIsControlsOpen(false);
+    } catch {
+      toast.error("Could not copy the project link.");
+    }
   }
 
   function toggleFocusMode() {
@@ -362,11 +409,11 @@ export default function WorkspaceHeader() {
     <>
       <header className="ff-safe-top ff-workspace-header">
         <div className="ff-workspace-header-nav">
-          <Link href="/app" aria-label="Return to project dashboard" className="ff-workspace-back">
+          <Link href="/app" aria-label="Return to project dashboard" data-tooltip="Projects" className="ff-workspace-back ff-workspace-has-tooltip">
             <WorkspaceIcon name="back" />
           </Link>
 
-          <Button variant="ghost" size="icon" className={`ff-workspace-icon-button ${isAssetSidebarOpen ? "is-active" : ""}`} aria-label={`${isAssetSidebarOpen ? "Close" : "Open"} project files`} aria-pressed={isAssetSidebarOpen} onClick={() => setIsAssetSidebarOpen(!isAssetSidebarOpen)}>
+          <Button variant="ghost" size="icon" className={`ff-workspace-icon-button ff-workspace-has-tooltip ${isAssetSidebarOpen ? "is-active" : ""}`} data-tooltip={isAssetSidebarOpen ? "Close files" : "Open files"} aria-label={`${isAssetSidebarOpen ? "Close" : "Open"} project files`} aria-pressed={isAssetSidebarOpen} onClick={() => setIsAssetSidebarOpen(!isAssetSidebarOpen)}>
             <WorkspaceIcon name="files" />
           </Button>
         </div>
@@ -427,7 +474,6 @@ export default function WorkspaceHeader() {
               </div>
             )}
             {activeAsset ? <span className="ff-workspace-file-version">v{activeAsset.version}</span> : null}
-            {isRefreshing ? <span className="ff-workspace-refresh-dot" aria-label="Refreshing workspace" /> : null}
           </div>
         </div>
 
@@ -438,10 +484,10 @@ export default function WorkspaceHeader() {
         </div>
 
         <div className="ff-workspace-actions">
-          <Button variant="ghost" size="icon" className="ff-workspace-icon-button" onClick={toggleFocusMode} aria-pressed={focusMode} aria-label={focusMode ? "Restore both workspace panels" : "Focus the review canvas"} title={focusMode ? "Restore panels" : "Focus canvas"}>
+          <Button variant="ghost" size="icon" className="ff-workspace-icon-button ff-workspace-has-tooltip" data-tooltip={focusMode ? "Restore panels" : "Focus canvas"} onClick={toggleFocusMode} aria-pressed={focusMode} aria-label={focusMode ? "Restore both workspace panels" : "Focus the review canvas"}>
             <WorkspaceIcon name="focus" />
           </Button>
-          <Button variant={isFeedbackSidebarOpen ? "secondary" : "ghost"} size="icon" className="ff-workspace-icon-button" onClick={() => setIsFeedbackSidebarOpen(!isFeedbackSidebarOpen)} aria-pressed={isFeedbackSidebarOpen} aria-label={`${isFeedbackSidebarOpen ? "Close" : "Open"} feedback panel`}>
+          <Button variant={isFeedbackSidebarOpen ? "secondary" : "ghost"} size="icon" className="ff-workspace-icon-button ff-workspace-has-tooltip" data-tooltip={isFeedbackSidebarOpen ? "Close feedback" : "Open feedback"} onClick={() => setIsFeedbackSidebarOpen(!isFeedbackSidebarOpen)} aria-pressed={isFeedbackSidebarOpen} aria-label={`${isFeedbackSidebarOpen ? "Close" : "Open"} feedback panel`}>
             <WorkspaceIcon name="feedback" />
           </Button>
 
@@ -495,6 +541,7 @@ export default function WorkspaceHeader() {
 
                   <div className="ff-workspace-menu-divider" />
                   <p className="ff-workspace-menu-label">Collaboration</p>
+                  <WorkspaceControlRow icon={<WorkspaceIcon name="link" />} title="Copy project link" description="Share with people who already have access." onClick={() => void copyProjectLink()} />
                   {isOwner ? <WorkspaceControlRow icon={<WorkspaceIcon name="share" />} title="Invite client" description="Send secure project access." onClick={() => { setIsInviteOpen(true); setIsControlsOpen(false); }} /> : null}
                   {isOwner ? <WorkspaceControlRow icon={<WorkspaceIcon name="members" />} title={`Members · ${project.members.length}`} description="Manage project access." onClick={() => { setIsMembersOpen(true); setIsControlsOpen(false); }} /> : null}
                   {isOwner ? <WorkspaceControlRow icon={<WorkspaceIcon name="lock" />} title={project.isDownloadUnlocked ? "Lock original downloads" : "Unlock original downloads"} description={project.isDownloadUnlocked ? "Disable original downloads." : "Allow original downloads."} onClick={() => void applyProjectUpdate({ isDownloadUnlocked: !project.isDownloadUnlocked }, project.isDownloadUnlocked ? "Original downloads locked." : "Original downloads unlocked.")} /> : null}
@@ -525,8 +572,8 @@ export default function WorkspaceHeader() {
       </header>
 
       <ProjectFormDialog open={isSettingsOpen} project={project} onClose={() => setIsSettingsOpen(false)} onSubmit={handleSettingsSubmit} />
-      <InviteProjectDialog open={isInviteOpen} projectId={projectId} projectTitle={project.title} projectVersion={project.version} onClose={() => setIsInviteOpen(false)} onInvited={async () => { await refreshWorkspace("invitation-created", true); }} />
-      <MemberManagerDialog open={isMembersOpen} projectId={projectId} projectVersion={project.version} ownerName={project.owner.name} members={project.members} onClose={() => setIsMembersOpen(false)} onChanged={async () => { await refreshWorkspace("member-changed", true); }} />
+      <InviteProjectDialog open={isInviteOpen} projectId={projectId} projectTitle={project.title} projectVersion={project.version} onClose={() => setIsInviteOpen(false)} onInvited={(version) => { setProject((current) => current ? { ...current, version } : current); void refreshWorkspace("invitation-created", true); }} />
+      <MemberManagerDialog open={isMembersOpen} projectId={projectId} projectVersion={project.version} ownerName={project.owner.name} members={project.members} onClose={() => setIsMembersOpen(false)} onChanged={(version) => { setProject((current) => current ? { ...current, version } : current); void refreshWorkspace("member-changed", true); }} />
 
       <Dialog
         open={Boolean(confirmAction)}

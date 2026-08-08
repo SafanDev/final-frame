@@ -25,7 +25,7 @@ import SelectMenu from "@/components/ui/SelectMenu";
 import { useWorkspaceData, useWorkspaceUI } from "@/contexts/WorkspaceContext";
 import { useSecureAssetUrl } from "@/hooks/useSecureAssetUrl";
 import { getAssetCategory } from "@/lib/assets/file-policy";
-import { upsertWorkspaceComment } from "@/lib/workspace/state";
+import { removeWorkspaceComment, replaceWorkspaceComment, upsertWorkspaceComment } from "@/lib/workspace/state";
 import {
   clearPendingFeedbackAnchor,
   loadPendingFeedbackAnchor,
@@ -85,6 +85,7 @@ export default function CanvasArea() {
     isOwner,
     isLocked,
     currentUserId,
+    isOnline,
     emitCursor,
     localUploadPreview,
     clearLocalUploadPreview,
@@ -156,11 +157,20 @@ export default function CanvasArea() {
   const activeStack = useMemo(() => activeAsset
     ? [...(assetStacks[activeAsset.stackKey] ?? [])].filter((asset) => asset.processingStatus === "CLEAN").sort((left, right) => right.version - left.version)
     : [], [activeAsset, assetStacks]);
+  const reviewAssetSequence = useMemo(() => Object.values(assetStacks)
+    .filter((stack) => stack.length > 0)
+    .map((stack) => [...stack].sort((left, right) => right.version - left.version)[0])
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)), [assetStacks]);
   const canCompare = category === "image" && activeStack.length > 1;
   const activeComment = useMemo(
     () => activeAsset?.comments.find((comment) => comment.id === activePinId) ?? null,
     [activeAsset, activePinId],
   );
+  const currentUser = useMemo(() => {
+    if (!project || !currentUserId) return null;
+    if (project.ownerId === currentUserId) return project.owner;
+    return project.members.find((member) => member.userId === currentUserId)?.user ?? null;
+  }, [currentUserId, project]);
   const nextPinnedCommentNumber = useMemo(
     () => filteredComments.filter((comment) => comment.xPos !== null && comment.yPos !== null).length + 1,
     [filteredComments],
@@ -732,12 +742,30 @@ export default function CanvasArea() {
     return () => stage.removeEventListener("wheel", handleWheel);
   }, [isCompareMode, updateScale, usesScrollableDocument]);
 
-  function changeAsset(direction: -1 | 1) {
-    if (!project?.assets.length || !activeAssetId) return;
-    const index = project.assets.findIndex((asset) => asset.id === activeAssetId);
-    const next = project.assets[index + direction];
-    if (next) setActiveAssetId(next.id);
-  }
+  const changeAsset = useCallback((direction: -1 | 1) => {
+    if (!activeAsset || reviewAssetSequence.length < 2) return;
+    const index = reviewAssetSequence.findIndex((asset) => asset.stackKey === activeAsset.stackKey);
+    if (index < 0) return;
+    const next = reviewAssetSequence[index + direction];
+    if (!next) return;
+    setActivePinId(null);
+    setIsCompareMode(false);
+    setActiveAssetId(next.id);
+  }, [activeAsset, reviewAssetSequence, setActiveAssetId, setActivePinId, setIsCompareMode]);
+
+  useEffect(() => {
+    const handleFileShortcut = (event: globalThis.KeyboardEvent) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (pendingPin || isPinSubmissionInFlight) return;
+      event.preventDefault();
+      event.stopPropagation();
+      changeAsset(event.key === "ArrowRight" ? 1 : -1);
+    };
+    window.addEventListener("keydown", handleFileShortcut, true);
+    return () => window.removeEventListener("keydown", handleFileShortcut, true);
+  }, [changeAsset, isPinSubmissionInFlight, pendingPin]);
 
   function handleStageKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget) return;
@@ -745,16 +773,6 @@ export default function CanvasArea() {
       cancelPendingPin();
       setActivePinId(null);
       if (isCompareMode) setIsCompareMode(false);
-      return;
-    }
-    if (event.altKey && event.key === "ArrowLeft") {
-      event.preventDefault();
-      changeAsset(-1);
-      return;
-    }
-    if (event.altKey && event.key === "ArrowRight") {
-      event.preventDefault();
-      changeAsset(1);
       return;
     }
     if (event.key === "+" || event.key === "=") {
@@ -888,32 +906,75 @@ export default function CanvasArea() {
     openFeedbackSidebar();
   }
 
-  function handlePinSubmitStart() {
-    setIsPinSubmissionInFlight(true);
-    // Resume from the captured timestamp from this Save gesture. The pending pin
-    // stays visible as an optimistic marker while persistence finishes.
-    resumeVideoIfNeeded();
-  }
-
-  function handlePinSubmitError() {
-    // Keep the exact pending anchor and reveal the composer again with its error.
-    setIsPinSubmissionInFlight(false);
-  }
-
-  function handleCreated(comment: ProjectComment) {
-    setProject((current) => current ? upsertWorkspaceComment(current, comment.assetId, comment) : current);
-    // Saving feedback never steals focus. The new pin stays visible and can be
-    // selected explicitly later on any file type.
+  function clearAcceptedPendingAnchor(assetId: string) {
     setActivePinId(null);
     setPendingPin(null);
     setPendingApiLocation(null);
     setPendingPageNumber(null);
     setPendingLineRange(null);
     setPendingTimestamp(null);
-    if (activeAssetId) clearPendingFeedbackAnchor(projectId, activeAssetId);
+    clearPendingFeedbackAnchor(projectId, assetId);
     setIsPinSubmissionInFlight(false);
+    resumeVideoIfNeeded();
+  }
+
+  function handlePinSubmitStart() {
+    // Only voice-note feedback reaches this blocking path. Text feedback is
+    // inserted locally and persists in the background.
+    setIsPinSubmissionInFlight(true);
+    resumeVideoIfNeeded();
+  }
+
+  function handlePinSubmitError() {
+    setIsPinSubmissionInFlight(false);
+  }
+
+  function handleCreated(comment: ProjectComment) {
+    setProject((current) => current ? upsertWorkspaceComment(current, comment.assetId, comment) : current);
+    clearAcceptedPendingAnchor(comment.assetId);
     openFeedbackSidebar();
     toast.success("Feedback pinned.");
+  }
+
+  function handleOptimisticCreated(comment: ProjectComment) {
+    setProject((current) => current ? upsertWorkspaceComment(current, comment.assetId, comment) : current);
+    clearAcceptedPendingAnchor(comment.assetId);
+    openFeedbackSidebar();
+  }
+
+  function handleOptimisticSettled(temporaryId: string, comment: ProjectComment) {
+    setProject((current) => current ? replaceWorkspaceComment(current, comment.assetId, temporaryId, comment) : current);
+  }
+
+  function handleOptimisticFailed(comment: ProjectComment, failure: { message: string; requestId: string | null }) {
+    setProject((current) => current ? removeWorkspaceComment(current, comment.assetId, comment.id) : current);
+
+    const apiLocation = comment.xPos !== null && comment.yPos !== null ? { x: comment.xPos, y: comment.yPos } : null;
+    const surfacePoint = comment.pageNumber !== null && apiLocation
+      ? pdfPointToSurface(comment.pageNumber, apiLocation) ?? apiLocation
+      : apiLocation;
+    const memory: PendingFeedbackAnchorMemory = {
+      surfacePoint,
+      apiLocation,
+      pageNumber: comment.pageNumber,
+      lineStart: comment.lineStart,
+      lineEnd: comment.lineEnd,
+      timestamp: comment.timestamp,
+    };
+    savePendingFeedbackAnchor(projectId, comment.assetId, memory);
+
+    if (activeAssetId === comment.assetId) {
+      setPendingPin(surfacePoint);
+      setPendingApiLocation(apiLocation);
+      setPendingPageNumber(comment.pageNumber);
+      setPendingLineRange(comment.lineStart !== null ? { start: comment.lineStart, end: comment.lineEnd ?? comment.lineStart } : null);
+      setPendingTimestamp(comment.timestamp);
+      openFeedbackSidebar();
+    }
+
+    toast.error(failure.message, {
+      description: failure.requestId ? `Support reference: ${failure.requestId}` : "Your draft was restored.",
+    });
   }
 
   function commitZoomInput() {
@@ -1021,7 +1082,7 @@ export default function CanvasArea() {
           onKeyDown={handleStageKeyDown}
           className={`ff-workspace-stage ${usesScrollableDocument ? "is-scrollable" : "is-centered"} ${isPanning ? "cursor-grabbing select-none" : isSpacePressed ? "cursor-grab select-none" : supportsPins && !isLocked ? "cursor-crosshair" : "cursor-default"}`}
           aria-label="Asset review canvas. Click the file to add feedback, pinch or use Shift plus the mouse wheel to zoom, and press question mark for shortcuts."
-          aria-keyshortcuts="P + - 0 F ? Alt+ArrowLeft Alt+ArrowRight Escape"
+          aria-keyshortcuts="P + - 0 F ? J K Alt+ArrowLeft Alt+ArrowRight Escape"
         >
           <div style={documentStyle} className={usesScrollableDocument ? "mx-auto w-max origin-top" : "will-change-transform"}>
             <div ref={surfaceRef} onPointerDownCapture={rememberVideoPlaybackBeforePointer} onClick={handleSurfaceClick} className="relative inline-block min-h-1 min-w-1">
@@ -1100,6 +1161,8 @@ export default function CanvasArea() {
               projectId={projectId}
               assetId={activeAsset.id}
               currentUserId={currentUserId ?? "anonymous"}
+              currentUser={currentUser}
+              isOnline={isOnline}
               location={pendingApiLocation}
               pageNumber={pendingPageNumber}
               lineStart={pendingLineRange?.start ?? null}
@@ -1111,6 +1174,9 @@ export default function CanvasArea() {
               placeholder="What should change here?"
               submitLabel="Save"
               onCreated={handleCreated}
+              onOptimisticCreated={handleOptimisticCreated}
+              onOptimisticSettled={handleOptimisticSettled}
+              onOptimisticFailed={handleOptimisticFailed}
               onSubmitStart={handlePinSubmitStart}
               onSubmitError={handlePinSubmitError}
               onCancel={cancelPendingPin}
