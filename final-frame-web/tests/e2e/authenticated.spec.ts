@@ -92,9 +92,9 @@ test.describe("authenticated integration", () => {
 
   test("opens account security with a revocable database-backed session", async ({ page }) => {
     await page.goto("/account");
-    await expect(page.getByRole("heading", { name: /control access without clutter/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Download account data", exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: /revoke all sessions/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^account$/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Download your data", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^sign out everywhere$/i })).toBeVisible();
 
     const deleteCard = page.getByRole("heading", { name: /delete account/i }).locator("..");
     const deleteButton = deleteCard.getByRole("button", { name: /^delete account$/i });

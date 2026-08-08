@@ -18,6 +18,13 @@ test("style elements require a request nonce while style attributes stay narrowl
   assert.doesNotMatch(policy, /style-src 'self' 'unsafe-inline'/);
 });
 
+test("trusted runtime style elements are limited to exact pinned hashes", () => {
+  const styleElement = policy.split("; ").find((directive) => directive.startsWith("style-src-elem"));
+  assert.match(styleElement ?? "", /'sha256-47DEQpj8HBSa\+\/TImW\+5JCeuQeRkm5NMpJWZG3hSuFU='/);
+  assert.match(styleElement ?? "", /'sha256-CIxDM5jnsGiKqXs2v7NKCY5MzdR9gu6TtiMJrDw29AY='/);
+  assert.doesNotMatch(policy, /style-src 'self' 'unsafe-inline'/);
+});
+
 test("trusted API previews can render without exposing private storage", () => {
   const connect = policy.split("; ").find((directive) => directive.startsWith("connect-src"));
   const image = policy.split("; ").find((directive) => directive.startsWith("img-src"));

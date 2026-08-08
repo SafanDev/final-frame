@@ -374,8 +374,8 @@ export default function AssetSidebar() {
       onDrop={handleDrop}
     >
 
-      <input ref={fileInputRef} type="file" multiple className="sr-only" onChange={handleFileChange} accept={ASSET_FILE_ACCEPT} />
-      <input ref={versionInputRef} type="file" className="sr-only" onChange={handleVersionChange} accept={ASSET_FILE_ACCEPT} />
+      <input ref={fileInputRef} type="file" multiple className="sr-only" onChange={handleFileChange} accept={ASSET_FILE_ACCEPT} aria-label="Upload project files" />
+      <input ref={versionInputRef} type="file" className="sr-only" onChange={handleVersionChange} accept={ASSET_FILE_ACCEPT} aria-label="Upload a new file version" />
       {isDraggingFiles ? (
         <div className="ff-workspace-drop-overlay" role="status" aria-live="polite">
           <span aria-hidden="true">＋</span>
