@@ -1,7 +1,10 @@
-import Link from "next/link";
-import BrandLink from "@/components/navigation/BrandLink";
-import NavItem from "@/components/navigation/NavItem";
-import LinkButton from "@/components/ui/LinkButton";
+/*
+ * Guest navigation intentionally uses native anchors so the anonymous
+ * landing route stays server-rendered without Next.js client-router hydration.
+ */
+/* eslint-disable @next/next/no-html-link-for-pages */
+import BrandMark from "@/components/BrandMark";
+import { getButtonClassName } from "@/components/ui/buttonStyles";
 
 const trustLinks = [
   ["Security", "/security"],
@@ -10,14 +13,29 @@ const trustLinks = [
   ["Support", "/support"],
 ] as const;
 
+function GuestBrandLink({ compact = false }: { compact?: boolean }) {
+  return (
+    <a
+      href="/"
+      className={`ff-brand-link${compact ? " ff-brand-link-compact" : ""}`}
+      aria-label="FinalFrame home"
+    >
+      <span className="ff-brand-mark" aria-hidden="true">
+        <BrandMark className="h-5 w-5" />
+      </span>
+      <span>FinalFrame</span>
+    </a>
+  );
+}
+
 function GuestNavigationLinks() {
   return (
     <>
-      <NavItem href="/">Home</NavItem>
-      <NavItem href="/login">Sign in</NavItem>
-      <LinkButton href="/register" variant="primary" size="sm" className="ff-nav-primary" prefetch={false}>
+      <a href="/" className="ff-nav-link">Home</a>
+      <a href="/login" className="ff-nav-link">Sign in</a>
+      <a href="/register" className={getButtonClassName("primary", "sm", "ff-nav-primary")}>
         Create account
-      </LinkButton>
+      </a>
     </>
   );
 }
@@ -26,7 +44,7 @@ export function GuestSiteHeader() {
   return (
     <header className="ff-site-header ff-safe-top">
       <nav aria-label="Primary navigation" className="ff-container ff-site-nav">
-        <BrandLink />
+        <GuestBrandLink />
 
         <div className="ff-guest-nav-desktop">
           <GuestNavigationLinks />
@@ -53,14 +71,14 @@ export function GuestSiteFooter() {
     <footer className="ff-site-footer">
       <div className="ff-container ff-footer-inner">
         <div className="ff-footer-brand">
-          <BrandLink compact />
+          <GuestBrandLink compact />
           <p>Focused review. Accountable approval.</p>
         </div>
         <nav aria-label="Trust and support" className="ff-footer-links">
           {trustLinks.map(([label, href]) => (
-            <Link key={href} href={href}>
+            <a key={href} href={href}>
               {label}
-            </Link>
+            </a>
           ))}
         </nav>
       </div>

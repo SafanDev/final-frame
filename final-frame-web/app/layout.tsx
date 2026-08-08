@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import WebVitalsReporter from "@/components/observability/WebVitalsReporter";
 import { GuestSiteFooter, GuestSiteHeader } from "@/components/navigation/GuestSiteChrome";
 import { clientEnv } from "@/lib/env/client";
 import "./globals.css";
@@ -70,22 +67,35 @@ export default async function RootLayout({
   await connection();
   const session = await getCurrentSession();
 
+  let telemetry: React.ReactNode = null;
+  if (clientEnv.NEXT_PUBLIC_TELEMETRY_ENABLED) {
+    const { default: WebVitalsReporter } = await import("@/components/observability/WebVitalsReporter");
+    telemetry = <WebVitalsReporter />;
+  }
+
+  let authenticatedHeader: React.ReactNode = null;
+  let authenticatedFooter: React.ReactNode = null;
+  if (session?.user) {
+    const [{ default: Navbar }, { default: Footer }] = await Promise.all([
+      import("@/components/Navbar"),
+      import("@/components/Footer"),
+    ]);
+    authenticatedHeader = <Navbar currentUser={{ name: session.user.name }} />;
+    authenticatedFooter = <Footer />;
+  }
+
   return (
     <html lang="en" data-scroll-behavior="smooth">
       <body>
-        {clientEnv.NEXT_PUBLIC_TELEMETRY_ENABLED ? <WebVitalsReporter /> : null}
+        {telemetry}
         <a className="skip-link" href="#main-content">
           Skip to main content
         </a>
-        {session?.user ? (
-          <Navbar currentUser={{ name: session.user.name }} />
-        ) : (
-          <GuestSiteHeader />
-        )}
+        {session?.user ? authenticatedHeader : <GuestSiteHeader />}
         <main id="main-content" tabIndex={-1} className="relative z-10 flex min-h-0 flex-1 flex-col">
           {children}
         </main>
-        {session?.user ? <Footer /> : <GuestSiteFooter />}
+        {session?.user ? authenticatedFooter : <GuestSiteFooter />}
       </body>
     </html>
   );

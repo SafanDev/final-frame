@@ -1,4 +1,4 @@
-import LinkButton from "@/components/ui/LinkButton";
+import { getButtonClassName } from "@/components/ui/buttonStyles";
 
 export default function HomeCTA() {
   return (
@@ -13,9 +13,9 @@ export default function HomeCTA() {
           <p className="ff-eyebrow">Ready when the work is</p>
           <h2 id="home-cta-title">Start the next review cleanly.</h2>
         </div>
-        <LinkButton href="/register" variant="primary" size="md" prefetch={false}>
+        <a href="/register" className={getButtonClassName("primary", "md")}>
           Create account
-        </LinkButton>
+        </a>
       </div>
     </section>
   );

@@ -1,5 +1,5 @@
-import LinkButton from "@/components/ui/LinkButton";
 import ReviewPreview from "@/components/public/ReviewPreview";
+import { getButtonClassName } from "@/components/ui/buttonStyles";
 
 export default function HomeHero() {
   return (
@@ -24,12 +24,12 @@ export default function HomeHero() {
           </p>
 
           <div className="ff-home-actions">
-            <LinkButton href="/register" variant="primary" size="md" prefetch={false}>
+            <a href="/register" className={getButtonClassName("primary", "md")}>
               Create account
-            </LinkButton>
-            <LinkButton href="/login" variant="secondary" size="md" prefetch={false}>
+            </a>
+            <a href="/login" className={getButtonClassName("secondary", "md")}>
               Sign in
-            </LinkButton>
+            </a>
           </div>
         </div>
 
