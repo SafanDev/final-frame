@@ -1596,3 +1596,68 @@
     break-inside: avoid;
   }
 }
+
+/* Guest public navigation uses native disclosure instead of hydrating the full
+   authenticated navigation bundle. This keeps the landing page interactive
+   without adding client-side work to its critical rendering path. */
+.ff-guest-nav-desktop {
+  display: none;
+}
+
+.ff-guest-nav-details {
+  position: relative;
+}
+
+.ff-guest-nav-summary {
+  display: inline-flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.ff-guest-nav-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ff-guest-nav-summary::marker {
+  content: "";
+}
+
+.ff-guest-nav-summary svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.ff-guest-nav-details[open] .ff-guest-nav-menu {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  right: 0;
+  display: flex;
+  width: min(18rem, calc(100vw - 2rem));
+  flex-direction: column;
+  gap: 0.25rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 0.55rem;
+  box-shadow: var(--shadow-md);
+}
+
+@media (min-width: 768px) {
+  .ff-guest-nav-desktop {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+  }
+
+  .ff-guest-nav-details {
+    display: none;
+  }
+}
