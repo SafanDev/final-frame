@@ -490,8 +490,7 @@
   padding: 0.4rem;
   color: var(--text-subtle);
   text-align: left;
-  cursor: pointer;
-  transition: background-color var(--duration-fast) ease, border-color var(--duration-fast) ease, color var(--duration-fast) ease, transform var(--duration-fast) var(--ease-standard);
+  transition: background-color var(--duration-fast) ease, border-color var(--duration-fast) ease, color var(--duration-fast) ease;
 }
 
 .ff-preview-file.is-active {
@@ -500,13 +499,6 @@
   color: var(--text);
 }
 
-@media (hover: hover) {
-  .ff-preview-file:hover {
-    transform: translateX(2px);
-    border-color: var(--border-strong);
-    color: var(--text);
-  }
-}
 
 .ff-preview-file-thumb {
   position: relative;
@@ -744,7 +736,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-.ff-review-stage-tools button {
+.ff-review-stage-tools span {
   border: 0;
   border-left: 1px solid var(--border);
   background: transparent;
@@ -752,13 +744,10 @@
   padding: 0.42rem 0.66rem;
   font-size: 0.61rem;
   font-weight: 680;
-  cursor: pointer;
-  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
 }
 
-.ff-review-stage-tools button:first-child { border-left: 0; }
-.ff-review-stage-tools button:hover,
-.ff-review-stage-tools button.is-active { background: var(--surface-hover); color: var(--text); }
+.ff-review-stage-tools span:first-child { border-left: 0; }
+.ff-review-stage-tools span.is-active { background: var(--surface-hover); color: var(--text); }
 
 .ff-preview-feedback-head {
   display: flex;
@@ -783,14 +772,8 @@
   padding: 0.65rem;
   color: inherit;
   text-align: left;
-  cursor: pointer;
-  transition: border-color var(--duration-fast) ease, transform var(--duration-fast) var(--ease-standard);
 }
 
-.ff-preview-comment:hover {
-  border-color: var(--border-emphasis);
-  transform: translateY(-1px);
-}
 
 .ff-preview-comment.is-new {
   border-color: color-mix(in srgb, var(--accent) 34%, transparent);
@@ -823,7 +806,7 @@
 
 .ff-preview-approval span { color: var(--text-subtle); font-size: 0.6rem; }
 .ff-preview-approval strong { color: var(--text); font-size: 0.67rem; font-weight: 690; }
-.ff-preview-approval button {
+.ff-preview-approval-action {
   width: max-content;
   margin-top: 0.35rem;
   border: 0;
@@ -833,11 +816,12 @@
   padding: 0.15rem 0;
   font-size: 0.62rem;
   font-weight: 760;
-  cursor: pointer;
 }
-.ff-preview-approval button:hover { color: var(--accent-hover); border-color: var(--accent-hover); }
+
 
 .ff-home-flow {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 720px;
   display: grid;
   gap: clamp(2rem, 5vw, 4rem);
   padding-block: clamp(4.5rem, 8vw, 7rem);
@@ -893,7 +877,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-.ff-home-flow-list button {
+.ff-flow-step {
   position: relative;
   display: grid;
   width: 100%;
@@ -905,13 +889,12 @@
   padding: 1rem 0;
   color: inherit;
   text-align: left;
-  cursor: pointer;
   transition:
     padding-left var(--duration-fast) var(--ease-standard),
     background var(--duration-fast) ease;
 }
 
-.ff-home-flow-list button::before {
+.ff-flow-step::before {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -926,12 +909,12 @@
     transform var(--duration-fast) var(--ease-standard);
 }
 
-.ff-home-flow-list li.is-active button::before {
+.ff-home-flow-list li.is-active .ff-flow-step::before {
   opacity: 1;
   transform: scaleY(1);
 }
 
-.ff-home-flow-list li.is-active button {
+.ff-home-flow-list li.is-active .ff-flow-step {
   padding-left: 0.5rem;
   background: rgb(255 255 255 / 1.8%);
 }
@@ -979,14 +962,8 @@
   transform: translate(2px, -2px);
 }
 
-@media (hover: hover) {
-  .ff-home-flow-list button:hover {
-    padding-left: 0.5rem;
-    background: rgb(255 255 255 / 1.8%);
-  }
-}
 
-.ff-home-cta-wrap { padding-bottom: clamp(4rem, 8vw, 7rem); }
+.ff-home-cta-wrap { content-visibility: auto; contain-intrinsic-size: auto 420px; padding-bottom: clamp(4rem, 8vw, 7rem); }
 
 .ff-home-cta {
   display: grid;
@@ -1231,7 +1208,7 @@
   .ff-review-stage-tools { display: none; }
   .ff-artboard-hint { right: 0.45rem; bottom: 0.45rem; }
   .ff-review-artboard h2 { font-size: clamp(1.15rem, 7vw, 1.8rem); }
-  .ff-home-flow-list button { grid-template-columns: 2.4rem minmax(0, 1fr) auto; }
+  .ff-flow-step { grid-template-columns: 2.4rem minmax(0, 1fr) auto; }
   .ff-flow-readout { grid-template-columns: 1.8rem minmax(0, 1fr); }
   .ff-auth-layout { min-height: calc(100dvh - 4.25rem); padding-block: 1.25rem 2.5rem; }
   .ff-auth-card { padding: 1.3rem; }

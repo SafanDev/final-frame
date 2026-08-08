@@ -2,6 +2,10 @@
 
 Use Node.js 24.18.0 and npm 11.16.0.
 
+## Readiness definitions
+
+A clean repository can be considered **source-ready / deployment-ready** after the source, API, web and CI gates below pass. **Deployment approval** is a separate operational state and requires the staging/domain, backup-restore, load/SLO and operator checks against the actual hosting environment. Publishing the repository does not require operating a public production service.
+
 ## Source checks
 
 ```bash

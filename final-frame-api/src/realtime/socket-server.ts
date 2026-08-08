@@ -302,11 +302,13 @@ export const createSocketRuntime = async (httpServer: HttpServer): Promise<Socke
 
         if (!socket.connected || sequence !== joinSequence) return;
         if (!project) {
+          // Reject the workspace join without closing the authenticated socket.
+          // Keeping the connection alive makes the denial observable by the client
+          // while still ensuring the socket never enters the unauthorized room.
           socket.emit('workspace-error', {
             code: 'PROJECT_ACCESS_DENIED',
             message: 'Project access is no longer available.',
           });
-          socket.disconnect(true);
           return;
         }
 

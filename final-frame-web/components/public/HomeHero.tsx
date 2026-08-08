@@ -43,7 +43,7 @@ export default function HomeHero() {
       <div className="ff-home-demo-wrap">
         <div className="ff-home-demo-note" aria-hidden="true">
           <span>Live review</span>
-          <span>Try the controls</span>
+          <span>Review preview</span>
         </div>
         <ReviewPreview />
       </div>
