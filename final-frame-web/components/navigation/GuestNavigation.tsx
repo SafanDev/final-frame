@@ -7,7 +7,7 @@ export default function GuestNavigation({ pathname }: { pathname: string }) {
       <NavItem href="/login" active={pathname === "/login"}>
         Sign in
       </NavItem>
-      <LinkButton href="/register" variant="primary" size="sm" className="ff-nav-primary">
+      <LinkButton href="/register" variant="primary" size="sm" className="ff-nav-primary" prefetch={false}>
         Create account
       </LinkButton>
     </>

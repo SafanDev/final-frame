@@ -13,7 +13,7 @@ export default function HomeCTA() {
           <p className="ff-eyebrow">Ready when the work is</p>
           <h2 id="home-cta-title">Start the next review cleanly.</h2>
         </div>
-        <LinkButton href="/register" variant="primary" size="md">
+        <LinkButton href="/register" variant="primary" size="md" prefetch={false}>
           Create account
         </LinkButton>
       </div>

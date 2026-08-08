@@ -24,10 +24,10 @@ export default function HomeHero() {
           </p>
 
           <div className="ff-home-actions">
-            <LinkButton href="/register" variant="primary" size="md">
+            <LinkButton href="/register" variant="primary" size="md" prefetch={false}>
               Create account
             </LinkButton>
-            <LinkButton href="/login" variant="secondary" size="md">
+            <LinkButton href="/login" variant="secondary" size="md" prefetch={false}>
               Sign in
             </LinkButton>
           </div>

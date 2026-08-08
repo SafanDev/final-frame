@@ -13,6 +13,7 @@ export default function NavItem({ href, active = false, children, className }: N
   return (
     <Link
       href={href}
+      prefetch={active || href === "/login" || href === "/register" ? false : undefined}
       aria-current={active ? "page" : undefined}
       className={cn("ff-nav-link", active && "is-active", className)}
     >

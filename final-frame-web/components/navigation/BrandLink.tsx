@@ -11,6 +11,7 @@ export default function BrandLink({ className, compact = false }: BrandLinkProps
   return (
     <Link
       href="/"
+      prefetch={false}
       className={cn("ff-brand-link", compact && "ff-brand-link-compact", className)}
       aria-label="FinalFrame home"
     >
