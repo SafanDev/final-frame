@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { signOut, useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
-import { toast } from "sonner";
+import { signOutCurrentUser } from "@/app/actions/auth";
 import AccountNavigation from "@/components/navigation/AccountNavigation";
 import BrandLink from "@/components/navigation/BrandLink";
 import GuestNavigation from "@/components/navigation/GuestNavigation";
@@ -13,12 +12,18 @@ import Button from "@/components/ui/Button";
 import { cn } from "@/lib/utils/cn";
 import { isProductRoute } from "@/lib/utils/productRoutes";
 
-export default function Navbar() {
-  const { data: session, status } = useSession();
+interface NavbarProps {
+  currentUser: {
+    name?: string | null;
+  } | null;
+}
+
+export default function Navbar({ currentUser }: NavbarProps) {
   const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const productRoute = isProductRoute(pathname);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -57,13 +62,16 @@ export default function Navbar() {
 
   async function handleSignOut() {
     if (isSigningOut) return;
+
     setIsSigningOut(true);
+    setSignOutError(false);
 
     try {
-      await signOut({ callbackUrl: "/" });
+      await signOutCurrentUser();
+      window.location.assign("/");
     } catch {
       setIsSigningOut(false);
-      toast.error("FinalFrame could not sign you out. Refresh the page and try again.");
+      setSignOutError(true);
     }
   }
 
@@ -96,17 +104,21 @@ export default function Navbar() {
             </NavItem>
           ) : null}
 
-          {status === "loading" ? (
-            <span className="ff-nav-loading" role="status">
-              Checking session…
-            </span>
-          ) : session?.user ? (
-            <AccountNavigation
-              pathname={pathname}
-              displayName={session.user.name || "FinalFrame user"}
-              isSigningOut={isSigningOut}
-              onSignOut={() => void handleSignOut()}
-            />
+          {currentUser ? (
+            <>
+              <AccountNavigation
+                pathname={pathname}
+                displayName={currentUser.name || "FinalFrame user"}
+                isSigningOut={isSigningOut}
+                onSignOut={() => void handleSignOut()}
+              />
+
+              {signOutError ? (
+                <span className="ff-nav-loading" role="alert">
+                  Sign out failed. Try again.
+                </span>
+              ) : null}
+            </>
           ) : (
             <GuestNavigation pathname={pathname} />
           )}

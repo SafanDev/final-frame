@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import AppToaster from "@/components/AppToaster";
 import { cn } from "@/lib/utils/cn";
 
 interface AuthShellProps {
@@ -12,6 +13,7 @@ interface AuthShellProps {
 export default function AuthShell({ title, description, children, footer, variant }: AuthShellProps) {
   return (
     <div className={cn("ff-auth-page", `is-${variant}`)}>
+      <AppToaster />
       <div className="ff-auth-backdrop" aria-hidden="true">
         <span className="ff-auth-line ff-auth-line-one" />
         <span className="ff-auth-line ff-auth-line-two" />
