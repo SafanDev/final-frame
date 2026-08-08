@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import VoiceNotePlayer from "@/components/feedback/VoiceNotePlayer";
 import InlineAlert from "@/components/ui/InlineAlert";
+import WorkspaceIcon from "@/components/workspace/WorkspaceIcon";
 import { getUserFacingErrorMessage, normalizeApiError } from "@/lib/api/errors";
 import { setCommentResolved, updateComment } from "@/lib/api/comments";
 import type { ProjectComment } from "@/lib/api/types";
@@ -130,26 +131,26 @@ export default function CommentCard({
       id={`comment-${comment.id}`}
       data-feedback-selection={comment.id}
       onClick={(event) => { if (hasAnchor && !isInteractiveTarget(event.target)) onActivate(comment); }}
-      className={`rounded-xl border p-3 transition ${isActive ? "border-emerald-400/50 bg-emerald-500/[0.07]" : "border-white/10 bg-white/[0.02] hover:border-white/20"} ${hasAnchor ? "cursor-pointer" : ""}`}
+      className={`ff-workspace-comment-card ${isActive ? "is-active" : ""} ${hasAnchor ? "is-anchored" : ""}`}
     >
-      <div className="flex items-start gap-3">
+      <div className="ff-workspace-comment-head">
         <button
           type="button"
           onClick={() => onActivate(comment)}
           aria-pressed={isActive}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-black outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-400 ${isDesignerComment ? "bg-sky-400 text-sky-950" : "bg-emerald-400 text-emerald-950"}`}
+          className={`ff-workspace-comment-avatar ${isDesignerComment ? "is-designer" : "is-client"}`}
           aria-label={hasAnchor ? `Show ${comment.author?.name ?? "user"}'s anchored feedback` : `Select ${comment.author?.name ?? "user"}'s general feedback`}
         >
           {(comment.author?.name ?? "U").slice(0, 2).toUpperCase()}
         </button>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <p className="truncate text-sm font-bold text-white">{comment.author?.name ?? "Former member"}</p>
-            <span className={`rounded-md px-1.5 py-0.5 text-xs font-bold uppercase tracking-[0.12em] ${isDesignerComment ? "bg-sky-500/10 text-sky-300" : "bg-emerald-500/10 text-emerald-300"}`}>{isDesignerComment ? "Designer" : "Client"}</span>
-            {comment.isResolved ? <span className="rounded-md bg-zinc-700/50 px-1.5 py-0.5 text-xs font-bold uppercase tracking-[0.12em] text-zinc-300">Resolved</span> : null}
+        <div className="ff-workspace-comment-copy">
+          <div className="ff-workspace-comment-author-row">
+            <p className="ff-workspace-comment-author">{comment.author?.name ?? "Former member"}</p>
+            <span className={`ff-workspace-comment-role ${isDesignerComment ? "is-designer" : "is-client"}`}>{isDesignerComment ? "Designer" : "Client"}</span>
+            {comment.isResolved ? <span className="ff-workspace-comment-resolved">Resolved</span> : null}
           </div>
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="ff-workspace-comment-meta">
             <time dateTime={comment.createdAt}>{formatDateTime(comment.createdAt, preferences)}</time>
             {comment.editedAt !== null ? " · edited" : ""}
             {` · ${anchorLabel}`}
@@ -183,24 +184,24 @@ export default function CommentCard({
               <VoiceNotePlayer projectId={projectId} assetId={comment.assetId} commentId={comment.id} initialUrl={comment.audioUrl} />
             </div>
           ) : null}
-          {displayText.note ? <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">{displayText.note}</p> : null}
+          {displayText.note ? <p className="ff-workspace-comment-body">{displayText.note}</p> : null}
           {displayText.transcript ? (
             <div className="mt-3 rounded-xl border border-sky-400/15 bg-sky-500/[0.06] p-3">
               <p className="text-xs font-bold uppercase tracking-[0.12em] text-sky-300">Transcript</p>
               <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">{displayText.transcript}</p>
             </div>
           ) : null}
-          {!comment.hasAudio && !displayText.note && !displayText.transcript ? <p className="mt-4 text-sm italic text-zinc-500">No text supplied</p> : null}
+          {!comment.hasAudio && !displayText.note && !displayText.transcript ? <p className="ff-workspace-comment-empty">No text supplied</p> : null}
         </>
       )}
 
       {error ? <InlineAlert tone="error" title="Feedback action failed" requestId={error.requestId} className="mt-3">{error.message}</InlineAlert> : null}
 
       {!isEditing && !isLocked && (isAuthor || isOwner) ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3">
-          {isAuthor ? <button type="button" onClick={() => { setIsEditing(true); setError(null); }} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-white">Edit</button> : null}
-          {isOwner ? <button type="button" onClick={() => void toggleResolved()} disabled={isResolving} className="min-h-9 rounded-lg px-3 text-xs font-semibold text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-50">{isResolving ? "Updating…" : comment.isResolved ? "Reopen" : "Resolve"}</button> : null}
-          {canDelete ? <button type="button" onClick={() => onRequestDelete(comment)} className="ml-auto min-h-9 rounded-lg px-3 text-xs font-semibold text-rose-300 hover:bg-rose-500/10">Delete</button> : null}
+        <div className="ff-workspace-comment-actions">
+          {isAuthor ? <button type="button" onClick={() => { setIsEditing(true); setError(null); }} className="ff-workspace-comment-action"><WorkspaceIcon name="edit" /><span>Edit</span></button> : null}
+          {isOwner ? <button type="button" onClick={() => void toggleResolved()} disabled={isResolving} className="ff-workspace-comment-action"><WorkspaceIcon name={comment.isResolved ? "revision" : "approve"} /><span>{isResolving ? "Updating…" : comment.isResolved ? "Reopen" : "Resolve"}</span></button> : null}
+          {canDelete ? <button type="button" onClick={() => onRequestDelete(comment)} className="ff-workspace-comment-action is-danger"><WorkspaceIcon name="trash" /><span>Delete</span></button> : null}
         </div>
       ) : null}
     </article>

@@ -965,10 +965,10 @@ export default function CanvasArea() {
                     data-feedback-selection={comment.id}
                     aria-label={`Feedback pin ${index + 1} by ${comment.author?.name ?? "former member"}${comment.isResolved ? ", resolved" : ""}`}
                     aria-pressed={isActive}
-                    className={`absolute z-20 flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-black shadow-md transition focus-visible:ring-4 focus-visible:ring-white/40 ${isOwnerComment ? "border-white/70 bg-sky-400 text-sky-950" : "border-black/50 bg-emerald-400 text-emerald-950"} ${comment.isResolved ? "opacity-55" : ""} ${isActive ? "ring-4 ring-white/25" : "hover:ring-2 hover:ring-white/20"}`}
-                    style={{ left: `${markerPosition.x}%`, top: `${markerPosition.y}%`, transform: `translate(-50%, -50%) scale(${(isActive ? 1.2 : 1) / scale})` }}
+                    className={`ff-feedback-pin ${isOwnerComment ? "is-designer" : "is-client"} ${comment.isResolved ? "is-resolved" : ""} ${isActive ? "is-active" : ""}`}
+                    style={{ left: `${markerPosition.x}%`, top: `${markerPosition.y}%`, transform: `translate(-50%, -50%) scale(${(isActive ? 1.08 : 1) / scale})` }}
                   >
-                    {index + 1}
+                    <span>{index + 1}</span>
                   </button>
                 );
               }) : null}
@@ -979,11 +979,11 @@ export default function CanvasArea() {
 
               {pendingPin ? (
                 <div
-                  className={`pointer-events-none absolute z-30 flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-black shadow-md ${isPinSubmissionInFlight ? (isOwner ? "border-white/70 bg-sky-400 text-sky-950" : "border-black/50 bg-emerald-400 text-emerald-950") : "border-white bg-amber-300 text-amber-950 ring-4 ring-amber-300/20"}`}
+                  className={`ff-feedback-pin is-pending ${isPinSubmissionInFlight ? (isOwner ? "is-designer" : "is-client") : "is-draft"}`}
                   style={{ left: `${pendingPin.x}%`, top: `${pendingPin.y}%`, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
                   aria-hidden="true"
                 >
-                  {isPinSubmissionInFlight ? nextPinnedCommentNumber : "＋"}
+                  <span>{isPinSubmissionInFlight ? nextPinnedCommentNumber : "+"}</span>
                 </div>
               ) : null}
             </div>
@@ -1004,14 +1004,15 @@ export default function CanvasArea() {
               timestamp={pendingTimestamp}
               autoFocus
               compact
-              title={pendingPageNumber !== null ? "PDF feedback" : "Pinned feedback"}
-              submitLabel="Save feedback"
+              title="Add feedback"
+              placeholder="What should change here?"
+              submitLabel="Save"
               onCreated={handleCreated}
               onSubmitStart={handlePinSubmitStart}
               onSubmitError={handlePinSubmitError}
               onCancel={cancelPendingPin}
             />
-            <p className="mt-1 text-center text-xs text-zinc-500">{pendingPin ? "Alt + arrows moves the pin. " : ""}Esc cancels.</p>
+            <p className="sr-only">{pendingPin ? "Alt plus arrow keys move the pin. " : ""}Escape cancels feedback.</p>
           </div>
           {isPinSubmissionInFlight ? <span className="sr-only" role="status">Saving feedback.</span> : null}
         </div>

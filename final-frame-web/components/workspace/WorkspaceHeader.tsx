@@ -222,26 +222,30 @@ export default function WorkspaceHeader() {
   return (
     <>
       <header className="ff-safe-top ff-workspace-header">
-        <Link href="/app" aria-label="Return to project dashboard" className="ff-workspace-back">
-          <WorkspaceIcon name="back" />
-        </Link>
+        <div className="ff-workspace-header-nav">
+          <Link href="/app" aria-label="Return to project dashboard" className="ff-workspace-back">
+            <WorkspaceIcon name="back" />
+          </Link>
 
-        <Button variant={isAssetSidebarOpen ? "secondary" : "ghost"} size="icon" className="ff-workspace-icon-button" aria-label={`${isAssetSidebarOpen ? "Close" : "Open"} project files`} aria-pressed={isAssetSidebarOpen} onClick={() => setIsAssetSidebarOpen(!isAssetSidebarOpen)}>
-          <WorkspaceIcon name="files" />
-        </Button>
+          <Button variant="ghost" size="icon" className={`ff-workspace-icon-button ${isAssetSidebarOpen ? "is-active" : ""}`} aria-label={`${isAssetSidebarOpen ? "Close" : "Open"} project files`} aria-pressed={isAssetSidebarOpen} onClick={() => setIsAssetSidebarOpen(!isAssetSidebarOpen)}>
+            <WorkspaceIcon name="files" />
+          </Button>
+        </div>
 
         <div className="ff-workspace-title">
           <div className="ff-workspace-title-line">
             <h1 className="ff-workspace-project-name">{project.title}</h1>
-            {isRefreshing ? <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-zinc-700 border-t-emerald-300" aria-label="Refreshing workspace" /> : null}
+            <span className="ff-workspace-title-separator" aria-hidden="true">/</span>
+            <p className="ff-workspace-file-name">{activeAsset ? activeAsset.fileName : "Choose a file"}</p>
+            {activeAsset ? <span className="ff-workspace-file-version">v{activeAsset.version}</span> : null}
+            {isRefreshing ? <span className="ff-workspace-refresh-dot" aria-label="Refreshing workspace" /> : null}
           </div>
-          <p className="ff-workspace-file-name">{activeAsset ? `${activeAsset.fileName} · v${activeAsset.version}` : "Choose a file to review"}</p>
         </div>
 
         <div className="ff-workspace-presence">
+          <Badge className="ff-workspace-status-badge" tone={project.isArchived ? "neutral" : statusTone[project.status]}>{project.isArchived ? "Archived" : projectStatusLabel(project.status)}</Badge>
           <ConnectionBadge status={realtimeStatus} message={realtimeMessage} compact />
           <PresenceList users={activeUsers} />
-          <Badge tone={project.isArchived ? "neutral" : statusTone[project.status]}>{project.isArchived ? "Archived" : projectStatusLabel(project.status)}</Badge>
         </div>
 
         <div className="ff-workspace-actions">
@@ -261,6 +265,7 @@ export default function WorkspaceHeader() {
               ref={controlTriggerRef}
               variant={isControlsOpen ? "primary" : "secondary"}
               size="sm"
+              className="ff-workspace-review-trigger"
               aria-haspopup="dialog"
               aria-expanded={isControlsOpen}
               aria-controls="review-controls-popover"

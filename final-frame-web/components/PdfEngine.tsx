@@ -202,7 +202,7 @@ export default function PdfEngine({ fileUrl = "", fileData, fileName, onLoad, on
         moduleError ? null : <div role="status" className="p-16 text-center text-sm text-zinc-400">Loading PDF viewer…</div>
       ) : (
         <DocumentComponent
-          file={fileUrl}
+          file={documentSource}
           options={withCredentials && !fileData ? pdfRequestOptions : undefined}
           onLoadSuccess={handleDocumentLoaded}
           onLoadError={() => {

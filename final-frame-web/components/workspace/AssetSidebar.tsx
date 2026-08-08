@@ -256,15 +256,15 @@ export default function AssetSidebar() {
 
       <div className="ff-workspace-panel-head">
         <div className="ff-workspace-panel-title-row">
-          <div><h2>Files</h2><p>{totalStackCount} item{totalStackCount === 1 ? "" : "s"}</p></div>
+          <div className="ff-workspace-panel-title-copy"><h2>Files</h2><span>{totalStackCount}</span></div>
           <div className="flex items-center gap-1.5">
-            {isOwner && !isLocked ? <Button size="sm" variant="primary" className="ff-workspace-upload-button" onClick={() => fileInputRef.current?.click()} disabled={upload.isUploading}>Upload</Button> : null}
+            {isOwner && !isLocked ? <Button size="sm" variant="primary" className="ff-workspace-upload-button" onClick={() => fileInputRef.current?.click()} disabled={upload.isUploading}><span aria-hidden="true">＋</span> Upload</Button> : null}
             <Button size="icon" variant="ghost" className="ff-workspace-mobile-close lg:hidden" onClick={() => setIsAssetSidebarOpen(false)} aria-label="Close files panel">×</Button>
           </div>
         </div>
         <div className="ff-workspace-panel-search">
           <label htmlFor="asset-search" className="sr-only">Search project files</label>
-          <input id="asset-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search files" className={`${fieldControlClass} ff-workspace-search-input`} />
+          <input id="asset-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a file…" className={`${fieldControlClass} ff-workspace-search-input`} />
           <button type="button" aria-expanded={showFilters} onClick={() => setShowFilters((current) => !current)} className={`ff-workspace-filter-button ${showFilters || category !== "all" ? "is-active" : ""}`}>Filter</button>
         </div>
         {showFilters ? (
@@ -302,28 +302,28 @@ export default function AssetSidebar() {
 
                   {expanded ? (
                     <div className="ff-workspace-version-panel">
-                      <div className="mb-2 flex items-center justify-between gap-2 px-2 py-1">
+                      <div className="ff-workspace-version-head">
                         <span className="ff-workspace-version-title">Versions</span>
-                        {isOwner && !isLocked ? <div className="flex"><button type="button" onClick={() => { setVersionStackName(latest.fileName); versionInputRef.current?.click(); }} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/10">Upload version</button><button type="button" onClick={() => setRenameAsset(latest)} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-zinc-300 hover:bg-white/5">Rename</button></div> : null}
+                        {isOwner && !isLocked ? <div className="ff-workspace-version-head-actions"><button type="button" onClick={() => { setVersionStackName(latest.fileName); versionInputRef.current?.click(); }}>New version</button><button type="button" onClick={() => setRenameAsset(latest)}>Rename</button></div> : null}
                       </div>
-                      <ul className="space-y-1">
+                      <ul className="ff-workspace-version-list">
                         {stack.map((asset, index) => (
-                          <li key={asset.id} className={`flex items-center gap-2 rounded-lg px-2 py-2 ${asset.id === activeAssetId ? "bg-white/10" : "hover:bg-white/[0.04]"}`}>
-                            <button type="button" onMouseEnter={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onPointerDown={() => { if (asset.processingStatus === "CLEAN") prefetchAssetUrl(asset.id); }} onFocus={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onClick={() => { setActiveAssetId(asset.id); setIsCompareMode(false); }} className="min-h-10 min-w-0 flex-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"><span className="block text-xs font-bold text-white">Version {asset.version}{index === 0 ? " · Latest" : ""}</span><span className="mt-1 block text-xs text-zinc-500">{formatRelativeDate(asset.updatedAt, preferences)} · {formatFileSize(asset.fileSize)} · {asset.processingStatus === "CLEAN" ? "Ready" : asset.processingStatus === "REJECTED" ? "Failed" : "Preparing"}</span></button>
-                            {asset.processingStatus === "REJECTED" && isOwner && !isLocked ? <button type="button" onClick={() => void handleRetryProcessing(asset)} disabled={retryingAssetId !== null} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/10 disabled:opacity-50">{retryingAssetId === asset.id ? "Retrying…" : "Retry"}</button> : null}
+                          <li key={asset.id} className={`ff-workspace-version-row ${asset.id === activeAssetId ? "is-active" : ""}`}>
+                            <button type="button" onMouseEnter={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onPointerDown={() => { if (asset.processingStatus === "CLEAN") prefetchAssetUrl(asset.id); }} onFocus={() => { if (asset.processingStatus === "CLEAN") { prefetchAssetUrl(asset.id); warmAssetPreview(asset.id, asset.previewMimeType ?? asset.mimeType, asset.previewFileSize ?? asset.fileSize); } }} onClick={() => { setActiveAssetId(asset.id); setIsCompareMode(false); }} className="ff-workspace-version-main"><span>v{asset.version}{index === 0 ? " · Latest" : ""}</span><small>{formatRelativeDate(asset.updatedAt, preferences)} · {formatFileSize(asset.fileSize)} · {asset.processingStatus === "CLEAN" ? "Ready" : asset.processingStatus === "REJECTED" ? "Failed" : "Preparing"}</small></button>
+                            {asset.processingStatus === "REJECTED" && isOwner && !isLocked ? <button type="button" onClick={() => void handleRetryProcessing(asset)} disabled={retryingAssetId !== null} className="ff-workspace-version-action is-warning">{retryingAssetId === asset.id ? "Retrying…" : "Retry"}</button> : null}
                             {isOwner && !isLocked && asset.processingStatus === "CLEAN" ? (
                               <button
                                 type="button"
                                 onClick={() => void handleSelectFinalAsset(asset)}
                                 disabled={selectingFinalAssetId !== null}
                                 aria-pressed={project?.finalAssetId === asset.id}
-                                className={`min-h-10 rounded-lg px-2 text-xs font-semibold transition disabled:opacity-50 ${project?.finalAssetId === asset.id ? "bg-emerald-400/15 text-emerald-200" : "text-zinc-400 hover:bg-white/5 hover:text-white"}`}
+                                className={`ff-workspace-version-action ${project?.finalAssetId === asset.id ? "is-final" : ""}`}
                               >
-                                {selectingFinalAssetId === asset.id ? "Saving…" : project?.finalAssetId === asset.id ? "Final" : "Use as final"}
+                                {selectingFinalAssetId === asset.id ? "Saving…" : project?.finalAssetId === asset.id ? "Final" : "Set final"}
                               </button>
-                            ) : project?.finalAssetId === asset.id ? <span className="rounded-md bg-emerald-400/10 px-2 py-1 text-[0.6875rem] font-bold uppercase tracking-[0.08em] text-emerald-200">Final</span> : null}
+                            ) : project?.finalAssetId === asset.id ? <span className="ff-workspace-version-final">Final</span> : null}
                             {canDownload && asset.processingStatus === "CLEAN" ? <AssetDownloadButton assetId={asset.id} fileName={asset.fileName} compact /> : null}
-                            {isOwner && !isLocked ? <button type="button" onClick={() => setDeleteTarget(asset)} aria-label={`Delete version ${asset.version} of ${asset.fileName}`} className="min-h-10 min-w-10 rounded-lg text-zinc-500 transition hover:bg-red-500/10 hover:text-red-300">×</button> : null}
+                            {isOwner && !isLocked ? <button type="button" onClick={() => setDeleteTarget(asset)} aria-label={`Delete version ${asset.version} of ${asset.fileName}`} className="ff-workspace-version-delete">×</button> : null}
                           </li>
                         ))}
                       </ul>

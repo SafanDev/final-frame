@@ -222,40 +222,56 @@
   margin-top: 1.25rem;
 }
 .ff-workspace-shell {
-  background: #070809;
+  background: #060708;
 }
 
 .ff-workspace-header {
   position: relative;
   z-index: 50;
   display: flex;
-  min-height: 3.5rem;
+  min-height: 3.25rem;
   flex: 0 0 auto;
   align-items: center;
-  gap: 0.2rem;
-  border-bottom: 1px solid var(--border);
-  background: #090a0b;
-  padding: 0.35rem 0.65rem;
+  gap: 0.45rem;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  background: #08090b;
+  padding: 0.35rem 0.6rem;
+}
+
+.ff-workspace-header-nav {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.15rem;
+  padding-right: 0.45rem;
+  border-right: 1px solid rgb(255 255 255 / 7%);
 }
 
 .ff-workspace-back,
 .ff-workspace-icon-button {
   display: inline-flex;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2rem !important;
+  height: 2rem !important;
+  min-height: 2rem !important;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border-radius: 0.55rem;
-  color: var(--text-muted);
-  transition: background-color var(--duration-fast) ease, color var(--duration-fast) ease, transform var(--duration-fast) ease;
+  border: 1px solid transparent !important;
+  border-radius: 0.55rem !important;
+  padding: 0 !important;
+  color: #858c97;
+  transition: background-color var(--duration-fast) ease, border-color var(--duration-fast) ease, color var(--duration-fast) ease;
 }
 
 .ff-workspace-back:hover,
-.ff-workspace-icon-button:hover {
-  background: rgb(255 255 255 / 5%);
-  color: var(--text);
+.ff-workspace-icon-button:hover,
+.ff-workspace-icon-button.is-active {
+  border-color: rgb(255 255 255 / 9%) !important;
+  background: #111418 !important;
+  color: #e7e9ed !important;
 }
+
+.ff-workspace-icon-button.is-active { color: #9de8ca !important; }
 
 .ff-workspace-back:focus-visible {
   outline: 2px solid var(--accent);
@@ -263,44 +279,64 @@
 }
 
 .ff-workspace-title {
+  display: flex;
   min-width: 0;
   flex: 1;
-  padding-inline: 0.35rem 0.7rem;
+  align-items: center;
+  padding: 0 0.25rem;
 }
 
 .ff-workspace-title-line {
   display: flex;
   min-width: 0;
+  width: 100%;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.42rem;
 }
 
 .ff-workspace-project-name {
   overflow: hidden;
-  color: var(--text);
-  font-size: 0.88rem;
+  max-width: min(13rem, 24vw);
+  flex: 0 1 auto;
+  color: #f1f3f5;
+  font-size: 0.78rem;
   font-weight: 760;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.012em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ff-workspace-file-name {
-  margin-top: 0.08rem;
+  min-width: 0;
+  max-width: 28rem;
+  margin: 0;
   overflow: hidden;
-  color: var(--text-subtle);
-  font-size: 0.68rem;
+  flex: 0 1 auto;
+  color: #8f97a3;
+  font-size: 0.7rem;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.ff-workspace-title-separator { color: #494f58; font-size: 0.74rem; }
+.ff-workspace-file-version { border: 1px solid rgb(255 255 255 / 8%); border-radius: 0.4rem; background: #0d0f12; padding: 0.18rem 0.35rem; color: #7a838e; font-size: 0.58rem; font-weight: 720; line-height: 1; }
+.ff-workspace-refresh-dot { width: 0.42rem; height: 0.42rem; flex: 0 0 auto; border: 1px solid rgb(79 209 161 / 32%); border-top-color: var(--accent); border-radius: 999px; animation: ff-spin 750ms linear infinite; }
+
 .ff-workspace-presence,
 .ff-workspace-actions {
   display: flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: 0.12rem;
 }
+
+.ff-workspace-actions {
+  padding-left: 0.45rem;
+  border-left: 1px solid rgb(255 255 255 / 7%);
+}
+
+.ff-workspace-status-badge { min-height: 1.75rem !important; padding-inline: 0.55rem !important; font-size: 0.62rem !important; }
+.ff-workspace-review-trigger { min-height: 2.1rem !important; border-radius: 0.65rem !important; padding-inline: 0.75rem !important; font-size: 0.74rem !important; }
 
 .ff-workspace-review-direct {
   min-height: 2.5rem;
@@ -454,6 +490,9 @@
 .ff-workspace-live-state > span:first-child.is-error { background: var(--danger); }
 .ff-workspace-live-state > span:first-child.is-offline { background: #71717a; }
 
+.ff-workspace-live-state.is-compact { min-height: 1.8rem; gap: 0.35rem; padding-inline: 0.4rem; font-size: 0.62rem; }
+.ff-workspace-live-state.is-compact > span:first-child { width: 0.38rem; height: 0.38rem; box-shadow: none; }
+
 @keyframes ff-live-pulse {
   50% { opacity: 0.4; }
 }
@@ -508,11 +547,11 @@
 
 .ff-presence-trigger {
   display: inline-flex;
-  min-height: 2.25rem;
+  min-height: 1.9rem;
   align-items: center;
-  gap: 0.35rem;
-  border-radius: 0.55rem;
-  padding: 0 0.3rem;
+  gap: 0.3rem;
+  border-radius: 0.5rem;
+  padding: 0 0.15rem;
   color: var(--text-subtle);
   outline: none;
   transition: background-color var(--duration-fast) ease, color var(--duration-fast) ease;
@@ -534,15 +573,15 @@
 
 .ff-presence-avatar {
   display: grid;
-  width: 1.75rem;
-  height: 1.75rem;
-  margin-left: -0.28rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-left: -0.25rem;
   place-items: center;
-  border: 2px solid #090a0b;
+  border: 1px solid #08090b;
   border-radius: 999px;
-  background: #202327;
-  color: #e4e4e7;
-  font-size: 0.58rem;
+  background: #171a1f;
+  color: #d8dce1;
+  font-size: 0.5rem;
   font-weight: 800;
 }
 
@@ -617,17 +656,17 @@
   flex: 0 0 auto;
   flex-direction: column;
   overflow: hidden;
-  background: #0a0c0e;
+  background: #080a0c;
 }
 
 .ff-workspace-assets {
-  width: 15.5rem;
-  border-right: 1px solid var(--border);
+  width: 16rem;
+  border-right: 1px solid rgb(255 255 255 / 7%);
 }
 
 .ff-workspace-feedback {
-  width: 19rem;
-  border-left: 1px solid var(--border);
+  width: 18rem;
+  border-left: 1px solid rgb(255 255 255 / 7%);
 }
 
 .ff-workspace-canvas-slot {
@@ -644,8 +683,9 @@
 
 .ff-workspace-panel-head,
 .ff-workspace-feedback-head {
-  border-bottom: 1px solid var(--border);
-  padding: 0.75rem;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  background: #090b0d;
+  padding: 0.65rem 0.7rem;
 }
 
 .ff-workspace-panel-title-row,
@@ -672,9 +712,12 @@
 }
 
 .ff-workspace-upload-button {
-  min-height: 2.2rem !important;
-  padding-inline: 0.75rem !important;
+  min-height: 1.95rem !important;
+  border-radius: 0.55rem !important;
+  padding-inline: 0.65rem !important;
+  font-size: 0.68rem !important;
 }
+.ff-workspace-upload-button > span { font-size: 0.75rem; line-height: 1; }
 
 .ff-workspace-mobile-close {
   width: 2.25rem !important;
@@ -686,33 +729,39 @@
 
 .ff-workspace-panel-search {
   display: flex;
-  gap: 0.4rem;
-  margin-top: 0.65rem;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
 }
 
 .ff-workspace-search-input {
-  min-height: 2.25rem !important;
+  min-height: 2rem !important;
+  border-color: rgb(255 255 255 / 8%) !important;
+  border-radius: 0.55rem !important;
+  background: #07090b !important;
   padding-block: 0 !important;
-  font-size: 0.75rem !important;
+  padding-inline: 0.65rem !important;
+  color: #d7dbe0 !important;
+  font-size: 0.68rem !important;
 }
+.ff-workspace-search-input::placeholder { color: #626a75; }
 
 .ff-workspace-filter-button {
-  min-height: 2.25rem;
+  min-height: 2rem;
   flex: 0 0 auto;
-  border: 1px solid var(--border);
-  border-radius: 0.6rem;
-  padding-inline: 0.65rem;
-  color: var(--text-subtle);
-  font-size: 0.7rem;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 0.55rem;
+  padding-inline: 0.55rem;
+  color: #78808b;
+  font-size: 0.64rem;
   font-weight: 700;
   transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease, color var(--duration-fast) ease;
 }
 
 .ff-workspace-filter-button:hover,
 .ff-workspace-filter-button.is-active {
-  border-color: rgb(79 209 161 / 30%);
-  background: rgb(79 209 161 / 7%);
-  color: #a7f3d0;
+  border-color: rgb(255 255 255 / 13%);
+  background: #111418;
+  color: #d6dae0;
 }
 
 .ff-workspace-file-filters,
@@ -754,51 +803,43 @@
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 0.5rem;
-  scrollbar-color: rgb(255 255 255 / 14%) transparent;
+  padding: 0.38rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 12%) transparent;
 }
 
 .ff-workspace-file-list,
 .ff-workspace-comment-list {
   display: grid;
-  gap: 0.3rem;
+  gap: 0.08rem;
 }
 
 .ff-workspace-file-card {
   overflow: hidden;
-  border: 1px solid transparent;
-  border-radius: 0.65rem;
+  border: 0;
+  border-radius: 0.55rem;
   background: transparent;
-  transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease;
+  transition: background-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
 }
 
-.ff-workspace-file-card:hover {
-  border-color: var(--border);
-  background: rgb(255 255 255 / 2.5%);
-}
+.ff-workspace-file-card:hover { background: #0e1114; }
 
 .ff-workspace-file-card.is-active {
-  border-color: rgb(79 209 161 / 24%);
-  background: rgb(79 209 161 / 5%);
-  box-shadow: inset 2px 0 0 rgb(79 209 161 / 78%);
+  background: #10161a;
+  box-shadow: inset 2px 0 0 rgb(79 209 161 / 72%);
 }
 
-.ff-workspace-file-card-main {
-  display: flex;
-  align-items: center;
-  gap: 0.2rem;
-  padding: 0.2rem;
-}
+.ff-workspace-file-card-main { display: flex; align-items: center; gap: 0.05rem; padding: 0.12rem; }
 
 .ff-workspace-file-button {
   display: flex;
   min-width: 0;
-  min-height: 3rem;
+  min-height: 2.8rem;
   flex: 1;
   align-items: center;
-  gap: 0.6rem;
-  border-radius: 0.5rem;
-  padding: 0.4rem 0.45rem;
+  gap: 0.55rem;
+  border-radius: 0.45rem;
+  padding: 0.34rem 0.42rem;
   text-align: left;
   outline: none;
 }
@@ -809,37 +850,37 @@
 
 .ff-workspace-file-icon {
   display: grid;
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 1.72rem;
+  height: 1.72rem;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 0.5rem;
-  background: #15181b;
+  border-radius: 0.45rem;
+  background: #13171b;
   color: var(--text-subtle);
 }
 
-.ff-workspace-file-icon.is-active {
-  background: rgb(79 209 161 / 14%);
-  color: #7ee6bd;
-}
+.ff-workspace-file-icon.is-active { background: #10241e; color: #7be0b8; }
 
+.ff-workspace-file-copy { display: block; min-width: 0; flex: 1; }
+.ff-workspace-file-title { display: block; overflow: hidden; color: #e6e9ed; font-size: 0.74rem; font-weight: 690; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .ff-workspace-file-meta {
   display: block;
-  margin-top: 0.18rem;
+  margin-top: 0.12rem;
   overflow: hidden;
-  color: var(--text-subtle);
-  font-size: 0.65rem;
-  line-height: 1.35;
+  color: #747c87;
+  font-size: 0.59rem;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ff-workspace-file-expand {
-  width: 1.9rem;
-  height: 2.6rem;
+  width: 1.65rem;
+  height: 2.35rem;
   flex: 0 0 auto;
-  border-radius: 0.5rem;
-  color: var(--text-subtle);
+  border-radius: 0.45rem;
+  color: #737b86;
+  font-size: 0.72rem;
   transition: background-color var(--duration-fast) ease, color var(--duration-fast) ease;
 }
 
@@ -849,9 +890,9 @@
 }
 
 .ff-workspace-version-panel {
-  border-top: 1px solid var(--border);
-  background: rgb(0 0 0 / 14%);
-  padding: 0.4rem;
+  border-top: 1px solid rgb(255 255 255 / 6%);
+  background: #0a0d0f;
+  padding: 0.3rem 0.32rem 0.38rem;
 }
 
 .ff-workspace-version-title {
@@ -862,12 +903,13 @@
 
 .ff-workspace-feedback-tabs {
   display: flex;
-  min-height: 3rem;
+  min-height: 2.65rem;
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
-  border-bottom: 1px solid var(--border);
-  padding: 0 0.65rem;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  background: #090b0d;
+  padding: 0 0.55rem;
 }
 
 .ff-workspace-tablist {
@@ -878,10 +920,10 @@
 
 .ff-workspace-tab {
   position: relative;
-  min-height: 3rem;
+  min-height: 2.65rem;
   padding-inline: 0.45rem;
-  color: var(--text-subtle);
-  font-size: 0.7rem;
+  color: #727a85;
+  font-size: 0.64rem;
   font-weight: 720;
   transition: color var(--duration-fast) ease;
 }
@@ -899,9 +941,9 @@
   right: 0.45rem;
   bottom: -1px;
   left: 0.45rem;
-  height: 2px;
+  height: 1px;
   border-radius: 999px;
-  background: var(--accent);
+  background: #7eddb8;
   content: "";
 }
 
@@ -912,24 +954,21 @@
   flex-direction: column;
 }
 
-.ff-workspace-feedback-head {
-  padding: 0.65rem 0.7rem;
-}
+.ff-workspace-feedback-head { padding: 0.6rem 0.65rem; }
 
 .ff-workspace-feedback-filters {
   grid-template-columns: 1fr;
 }
 
-.ff-workspace-feedback-scroll {
-  padding: 0.55rem 0.6rem 0.7rem;
-}
+.ff-workspace-feedback-scroll { padding: 0.38rem 0.45rem 0.65rem; }
 
 .ff-workspace-comments-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 0.8rem;
-  padding-inline: 0.1rem;
+  margin-top: 0.55rem;
+  padding: 0.15rem 0.15rem 0.3rem;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
   color: var(--text-muted);
 }
 
@@ -943,9 +982,7 @@
   font-size: 0.66rem;
 }
 
-.ff-workspace-comment-list {
-  margin-top: 0.4rem;
-}
+.ff-workspace-comment-list { margin-top: 0; gap: 0; }
 
 .ff-workspace-feedback-empty,
 .ff-workspace-activity-empty {
@@ -987,11 +1024,12 @@
 }
 
 .ff-ai-brief {
-  margin-top: 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 0.65rem;
-  background: rgb(255 255 255 / 2%);
-  padding: 0.65rem;
+  margin-top: 0.3rem;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.5rem 0.15rem 0.6rem;
 }
 
 .ff-ai-brief-head {
@@ -1310,20 +1348,79 @@
     flex: 1;
   }
 }
+
+.ff-workspace-panel-title-copy { display: flex; min-width: 0; align-items: center; gap: 0.45rem; }
+.ff-workspace-panel-title-copy h2 { color: #eef0f3; font-size: 0.75rem; font-weight: 760; }
+.ff-workspace-panel-title-copy span { display: inline-grid; min-width: 1.15rem; height: 1.15rem; place-items: center; border-radius: 999px; background: #15181c; color: #7f8793; font-size: 0.57rem; font-weight: 760; }
+
+.ff-workspace-version-head { display: flex; min-height: 1.9rem; align-items: center; justify-content: space-between; gap: 0.35rem; padding-inline: 0.3rem; }
+.ff-workspace-version-title { color: #767f8a; font-size: 0.58rem; font-weight: 760; letter-spacing: 0.06em; text-transform: uppercase; }
+.ff-workspace-version-head-actions { display: flex; gap: 0.08rem; }
+.ff-workspace-version-head-actions button { min-height: 1.7rem; border-radius: 0.4rem; padding-inline: 0.38rem; color: #87909b; font-size: 0.58rem; font-weight: 680; }
+.ff-workspace-version-head-actions button:first-child { color: #86dfbd; }
+.ff-workspace-version-head-actions button:hover { background: rgb(255 255 255 / 5%); color: #e5e8ec; }
+.ff-workspace-version-list { display: grid; gap: 0.08rem; }
+.ff-workspace-version-row { display: flex; min-width: 0; align-items: center; gap: 0.1rem; border-radius: 0.45rem; padding: 0.22rem 0.2rem; }
+.ff-workspace-version-row:hover, .ff-workspace-version-row.is-active { background: rgb(255 255 255 / 4%); }
+.ff-workspace-version-main { min-width: 0; min-height: 2.25rem; flex: 1; border-radius: 0.4rem; padding: 0.3rem 0.32rem; text-align: left; outline: none; }
+.ff-workspace-version-main:focus-visible { box-shadow: inset 0 0 0 1px var(--focus); }
+.ff-workspace-version-main span, .ff-workspace-version-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ff-workspace-version-main span { color: #dfe3e8; font-size: 0.63rem; font-weight: 720; }
+.ff-workspace-version-main small { margin-top: 0.12rem; color: #767f8a; font-size: 0.53rem; }
+.ff-workspace-version-action, .ff-workspace-version-delete, .ff-workspace-version-row > button[aria-label^="Download"] { min-width: 1.75rem !important; min-height: 1.75rem !important; height: 1.75rem !important; border-radius: 0.42rem !important; padding-inline: 0.35rem !important; color: #7f8792; font-size: 0.56rem !important; font-weight: 680; }
+.ff-workspace-version-action:hover, .ff-workspace-version-delete:hover, .ff-workspace-version-row > button[aria-label^="Download"]:hover { background: rgb(255 255 255 / 5%); color: #e3e6ea; }
+.ff-workspace-version-action.is-final, .ff-workspace-version-final { color: #91e4c3; }
+.ff-workspace-version-action.is-final { background: rgb(79 209 161 / 8%); }
+.ff-workspace-version-action.is-warning { color: #e7c37b; }
+.ff-workspace-version-final { border-radius: 0.35rem; background: rgb(79 209 161 / 7%); padding: 0.28rem 0.4rem; font-size: 0.53rem; font-weight: 760; text-transform: uppercase; }
+.ff-workspace-version-delete:hover { background: rgb(239 154 164 / 8%); color: #f1a9b0; }
+
+.ff-workspace-feedback-file { min-width: 0; flex: 1; }
+.ff-workspace-feedback-file h2 { overflow: hidden; color: #e8ebef; font-size: 0.72rem; font-weight: 710; letter-spacing: -0.008em; text-overflow: ellipsis; white-space: nowrap; }
+.ff-workspace-feedback-file p { margin-top: 0.1rem; color: #7a838e; font-size: 0.58rem; }
+.ff-workspace-feedback-actions { display: flex; flex: 0 0 auto; gap: 0.15rem; }
+.ff-workspace-feedback-add, .ff-workspace-feedback-filter { min-height: 1.9rem !important; border-radius: 0.5rem !important; padding-inline: 0.55rem !important; font-size: 0.62rem !important; }
+
+.ff-workspace-comment-card { position: relative; border: 0; border-bottom: 1px solid rgb(255 255 255 / 7%); border-radius: 0; background: transparent; padding: 0.72rem 0.2rem 0.68rem; transition: background-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease; }
+.ff-workspace-comment-card.is-anchored { cursor: pointer; }
+.ff-workspace-comment-card:hover { background: rgb(255 255 255 / 1.8%); }
+.ff-workspace-comment-card.is-active { background: rgb(128 200 238 / 5%); box-shadow: inset 2px 0 0 rgb(128 200 238 / 64%); }
+.ff-workspace-comment-head { display: flex; align-items: flex-start; gap: 0.55rem; }
+.ff-workspace-comment-avatar { display: grid; width: 1.78rem; height: 1.78rem; flex: 0 0 auto; place-items: center; border: 1px solid rgb(255 255 255 / 11%); border-radius: 0.55rem; background: #12161a; color: #aab1bb; font-size: 0.54rem; font-weight: 800; outline: none; }
+.ff-workspace-comment-avatar.is-designer { border-color: rgb(128 200 238 / 26%); color: #a9d9f2; }
+.ff-workspace-comment-avatar.is-client { border-color: rgb(79 209 161 / 24%); color: #9be4c6; }
+.ff-workspace-comment-avatar:hover, .ff-workspace-comment-avatar:focus-visible { border-color: rgb(255 255 255 / 22%); background: #171b20; color: #f0f2f4; }
+.ff-workspace-comment-avatar:focus-visible { box-shadow: 0 0 0 2px var(--focus-ring); }
+.ff-workspace-comment-copy { min-width: 0; flex: 1; }
+.ff-workspace-comment-author-row { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 0.28rem 0.4rem; }
+.ff-workspace-comment-author { overflow: hidden; max-width: 9.5rem; color: #eceef1; font-size: 0.7rem; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+.ff-workspace-comment-role, .ff-workspace-comment-resolved { color: #737b86; font-size: 0.5rem; font-weight: 760; letter-spacing: 0.06em; text-transform: uppercase; }
+.ff-workspace-comment-role.is-designer { color: #79bee2; }
+.ff-workspace-comment-role.is-client { color: #78cfad; }
+.ff-workspace-comment-meta { margin-top: 0.16rem; overflow: hidden; color: #7a838e; font-size: 0.56rem; text-overflow: ellipsis; white-space: nowrap; }
+.ff-workspace-comment-body { margin-top: 0.6rem; white-space: pre-wrap; overflow-wrap: anywhere; color: #cfd4da; font-size: 0.74rem; line-height: 1.5; }
+.ff-workspace-comment-empty { margin-top: 0.55rem; color: #737b86; font-size: 0.68rem; font-style: italic; }
+.ff-workspace-comment-actions { display: flex; align-items: center; gap: 0.08rem; margin-top: 0.52rem; }
+.ff-workspace-comment-action { min-height: 1.75rem; border-radius: 0.4rem; padding-inline: 0.42rem; color: #747d88; font-size: 0.58rem; font-weight: 680; }
+.ff-workspace-comment-action:hover:not(:disabled) { background: rgb(255 255 255 / 5%); color: #e4e7eb; }
+.ff-workspace-comment-action:disabled { opacity: 0.45; }
+.ff-workspace-comment-action.is-danger { margin-left: auto; color: #c8848c; }
+.ff-workspace-comment-action.is-danger:hover { background: rgb(239 154 164 / 7%); color: #f0a8b0; }
+
 .ff-workspace-canvas {
   position: relative;
   display: flex;
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  background: #070809;
+  background: #050607;
 }
 
 .ff-workspace-stage {
   width: 100%;
   height: 100%;
   touch-action: none;
-  padding: 1.5rem 1.5rem 4.25rem;
+  padding: 1.1rem 1.15rem 3.9rem;
   outline: none;
 }
 
@@ -1431,7 +1528,7 @@
 
 .ff-canvas-toolbar {
   position: absolute;
-  bottom: 0.7rem;
+  bottom: 0.6rem;
   left: 50%;
   z-index: 30;
   display: flex;
@@ -1439,12 +1536,11 @@
   align-items: center;
   gap: 0.1rem;
   transform: translateX(-50%);
-  border: 1px solid var(--border-strong);
-  border-radius: 0.75rem;
-  background: rgb(17 19 21 / 96%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.65rem;
+  background: rgb(12 14 16 / 96%);
   padding: 0.2rem;
-  box-shadow: 0 10px 28px rgb(0 0 0 / 22%);
-  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 22px rgb(0 0 0 / 26%);
 }
 
 .ff-canvas-toolbar > button {
@@ -1519,16 +1615,16 @@
 
 .ff-canvas-help {
   position: absolute;
-  top: 0.7rem;
-  right: 0.7rem;
+  top: 0.6rem;
+  right: 0.6rem;
   z-index: 30;
   display: grid;
   width: 2rem;
   height: 2rem;
   place-items: center;
-  border: 1px solid var(--border);
+  border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 0.55rem;
-  background: rgb(17 19 21 / 92%);
+  background: rgb(10 12 14 / 92%);
   color: var(--text-subtle);
   font-size: 0.68rem;
   font-weight: 800;
@@ -1683,7 +1779,7 @@
 .ff-workspace-video-preview {
   display: block;
   max-width: min(92vw, 100%);
-  max-height: calc(100vh - 8rem);
+  max-height: calc(100vh - 7rem);
   border-radius: 0.6rem;
   background: #000;
   box-shadow: 0 16px 48px rgb(0 0 0 / 28%);
@@ -1736,6 +1832,20 @@
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+
+/* Compact speech-pin marker: visible without covering the reviewed work. */
+.ff-feedback-pin { position: absolute; z-index: 20; display: grid; width: 1.72rem; height: 1.72rem; place-items: center; border: 1px solid rgb(255 255 255 / 24%); border-radius: 0.62rem; background: #101419; box-shadow: 0 5px 14px rgb(0 0 0 / 34%); color: #d7dce2; font-size: 0.64rem; font-weight: 820; line-height: 1; outline: none; transform-origin: center; transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease, color var(--duration-fast) ease, box-shadow var(--duration-fast) ease; }
+.ff-feedback-pin::after { position: absolute; bottom: -0.22rem; left: 50%; width: 0.42rem; height: 0.42rem; transform: translateX(-50%) rotate(45deg); border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; background: #101419; content: ""; opacity: 0.9; }
+.ff-feedback-pin > span { position: relative; z-index: 1; }
+.ff-feedback-pin.is-designer { border-color: rgb(128 200 238 / 68%); color: #9dd8f5; }
+.ff-feedback-pin.is-client { border-color: rgb(79 209 161 / 64%); color: #91e5c3; }
+.ff-feedback-pin.is-draft { z-index: 30; border-color: rgb(243 198 109 / 74%); color: #f2cb7d; }
+.ff-feedback-pin.is-pending { z-index: 30; pointer-events: none; }
+.ff-feedback-pin:hover, .ff-feedback-pin:focus-visible, .ff-feedback-pin.is-active { background: #161c22; box-shadow: 0 6px 18px rgb(0 0 0 / 40%), 0 0 0 3px rgb(255 255 255 / 7%); }
+.ff-feedback-pin.is-designer:hover, .ff-feedback-pin.is-designer:focus-visible, .ff-feedback-pin.is-designer.is-active { border-color: #8fd4f5; color: #c5eafa; }
+.ff-feedback-pin.is-client:hover, .ff-feedback-pin.is-client:focus-visible, .ff-feedback-pin.is-client.is-active { border-color: #75deb8; color: #c0f1de; }
+.ff-feedback-pin.is-resolved { opacity: 0.48; }
+
 .ff-workspace-pending-feedback {
   position: absolute;
   right: 0.75rem;
@@ -1762,6 +1872,164 @@
   font-size: 0.7rem;
   line-height: 1.45;
 }
+
+/* Final workspace readability and interaction pass. */
+.ff-workspace-header {
+  min-height: 3.55rem;
+  gap: 0.65rem;
+  background: #090b0d;
+  padding: 0.42rem 0.72rem;
+}
+
+.ff-workspace-header-nav {
+  gap: 0.25rem;
+  padding-right: 0.72rem;
+}
+
+.ff-workspace-back,
+.ff-workspace-icon-button {
+  width: 2.15rem !important;
+  height: 2.15rem !important;
+  min-height: 2.15rem !important;
+  border-radius: 0.62rem !important;
+}
+
+.ff-workspace-title { padding-inline: 0.1rem 0.45rem; }
+.ff-workspace-title-line { gap: 0.52rem; }
+.ff-workspace-project-name { max-width: min(14rem, 24vw); font-size: 0.84rem; font-weight: 780; }
+.ff-workspace-file-name { max-width: 30rem; color: #a2a9b3; font-size: 0.76rem; }
+.ff-workspace-title-separator { color: #565d67; font-size: 0.82rem; }
+.ff-workspace-file-version { padding: 0.22rem 0.4rem; color: #8d96a2; font-size: 0.63rem; }
+.ff-workspace-presence,
+.ff-workspace-actions { gap: 0.28rem; }
+.ff-workspace-actions { padding-left: 0.65rem; }
+.ff-workspace-status-badge { min-height: 1.9rem !important; padding-inline: 0.62rem !important; font-size: 0.67rem !important; }
+.ff-workspace-live-state.is-compact { min-height: 1.9rem; gap: 0.38rem; padding-inline: 0.45rem; font-size: 0.67rem; }
+.ff-presence-trigger { min-height: 2rem; padding-inline: 0.18rem; }
+.ff-presence-avatar { width: 1.62rem; height: 1.62rem; font-size: 0.55rem; }
+.ff-workspace-review-trigger { min-height: 2.2rem !important; border-radius: 0.68rem !important; padding-inline: 0.82rem !important; font-size: 0.77rem !important; }
+
+.ff-workspace-panel-head,
+.ff-workspace-feedback-head {
+  padding: 0.78rem 0.72rem;
+}
+.ff-workspace-panel-title-copy { gap: 0.5rem; }
+.ff-workspace-panel-title-copy h2 { font-size: 0.82rem; }
+.ff-workspace-panel-title-copy span { min-width: 1.28rem; height: 1.28rem; font-size: 0.62rem; }
+.ff-workspace-upload-button { min-height: 2.15rem !important; padding-inline: 0.75rem !important; font-size: 0.73rem !important; }
+.ff-workspace-upload-button > span { font-size: 0.82rem; }
+.ff-workspace-panel-search { gap: 0.38rem; margin-top: 0.68rem; }
+.ff-workspace-search-input { min-height: 2.2rem !important; padding-inline: 0.72rem !important; font-size: 0.72rem !important; }
+.ff-workspace-filter-button { min-height: 2.2rem; padding-inline: 0.65rem; font-size: 0.68rem; }
+.ff-workspace-file-filter { min-height: 2.1rem; font-size: 0.69rem; }
+.ff-workspace-panel-scroll { padding: 0.48rem; }
+.ff-workspace-file-list { gap: 0.22rem; }
+.ff-workspace-file-card { border-radius: 0.66rem; }
+.ff-workspace-file-card:hover { background: #0f1215; }
+.ff-workspace-file-card.is-active { background: #11181c; box-shadow: inset 2px 0 0 rgb(79 209 161 / 82%), inset 0 0 0 1px rgb(255 255 255 / 3%); }
+.ff-workspace-file-card-main { gap: 0.12rem; padding: 0.18rem; }
+.ff-workspace-file-button { min-height: 3.15rem; gap: 0.66rem; border-radius: 0.52rem; padding: 0.46rem 0.48rem; }
+.ff-workspace-file-icon { width: 1.95rem; height: 1.95rem; border-radius: 0.52rem; }
+.ff-workspace-file-title { font-size: 0.8rem; font-weight: 710; line-height: 1.3; }
+.ff-workspace-file-meta { margin-top: 0.16rem; color: #858e9a; font-size: 0.65rem; line-height: 1.35; }
+.ff-workspace-file-expand { width: 1.95rem; height: 2.55rem; border-radius: 0.5rem; font-size: 0.8rem; }
+.ff-workspace-version-panel { padding: 0.42rem 0.4rem 0.48rem; }
+.ff-workspace-version-head { min-height: 2.15rem; gap: 0.4rem; padding-inline: 0.35rem; }
+.ff-workspace-version-title { font-size: 0.63rem; }
+.ff-workspace-version-head-actions { gap: 0.15rem; }
+.ff-workspace-version-head-actions button { min-height: 1.95rem; padding-inline: 0.5rem; font-size: 0.64rem; }
+.ff-workspace-version-list { gap: 0.16rem; }
+.ff-workspace-version-row { gap: 0.16rem; padding: 0.28rem 0.26rem; }
+.ff-workspace-version-main { min-height: 2.55rem; padding: 0.36rem 0.4rem; }
+.ff-workspace-version-main span { font-size: 0.69rem; }
+.ff-workspace-version-main small { font-size: 0.6rem; }
+.ff-workspace-version-action,
+.ff-workspace-version-delete,
+.ff-workspace-version-row > button[aria-label^="Download"] { min-width: 1.95rem !important; min-height: 1.95rem !important; height: 1.95rem !important; padding-inline: 0.42rem !important; font-size: 0.63rem !important; }
+.ff-workspace-version-final { padding: 0.3rem 0.44rem; font-size: 0.59rem; }
+
+.ff-workspace-feedback-tabs { min-height: 2.9rem; padding-inline: 0.68rem; }
+.ff-workspace-tablist { gap: 0.3rem; }
+.ff-workspace-tab { min-height: 2.9rem; padding-inline: 0.48rem; font-size: 0.7rem; }
+.ff-workspace-feedback-head { padding: 0.72rem 0.68rem; }
+.ff-workspace-feedback-head-row { gap: 0.62rem; }
+.ff-workspace-feedback-file h2 { font-size: 0.78rem; font-weight: 730; }
+.ff-workspace-feedback-file p { margin-top: 0.14rem; color: #87909c; font-size: 0.64rem; }
+.ff-workspace-feedback-actions { position: relative; gap: 0.26rem; }
+.ff-workspace-feedback-add,
+.ff-workspace-feedback-filter { min-height: 2.08rem !important; border-radius: 0.56rem !important; padding-inline: 0.62rem !important; font-size: 0.68rem !important; }
+.ff-workspace-feedback-scroll { padding: 0.5rem 0.58rem 0.8rem; }
+.ff-workspace-comments-head { padding: 0.52rem 0.12rem 0.46rem; }
+.ff-workspace-comments-head h3 { font-size: 0.72rem; }
+.ff-workspace-comments-head span { font-size: 0.66rem; }
+.ff-workspace-comment-card { padding: 0.88rem 0.32rem 0.8rem; }
+.ff-workspace-comment-head { gap: 0.65rem; }
+.ff-workspace-comment-avatar { width: 2rem; height: 2rem; border-radius: 0.62rem; font-size: 0.6rem; }
+.ff-workspace-comment-author-row { gap: 0.32rem 0.44rem; }
+.ff-workspace-comment-author { max-width: 10rem; font-size: 0.77rem; }
+.ff-workspace-comment-role,
+.ff-workspace-comment-resolved { font-size: 0.56rem; letter-spacing: 0.055em; }
+.ff-workspace-comment-meta { margin-top: 0.2rem; color: #858e9a; font-size: 0.62rem; }
+.ff-workspace-comment-body { margin-top: 0.68rem; color: #d8dce2; font-size: 0.8rem; line-height: 1.55; }
+.ff-workspace-comment-empty { font-size: 0.73rem; }
+.ff-workspace-comment-actions { gap: 0.2rem; margin-top: 0.65rem; }
+.ff-workspace-comment-action { display: inline-flex; min-height: 2rem; align-items: center; gap: 0.32rem; border-radius: 0.48rem; padding-inline: 0.52rem; color: #8e97a3; font-size: 0.67rem; font-weight: 690; }
+.ff-workspace-comment-action svg { width: 0.86rem !important; height: 0.86rem !important; }
+.ff-workspace-comment-action.is-danger { color: #e0939c; }
+.ff-workspace-comment-action.is-danger:hover { color: #ffb1b9; }
+
+.ff-ai-brief { position: relative; margin: 0; border: 0; padding: 0; }
+.ff-ai-brief-trigger { position: relative; display: grid; width: 2.24rem; height: 2.24rem; place-items: center; border: 1px solid rgb(122 224 185 / 42%); border-radius: 0.68rem; background: #101917; color: #9ce7ca; outline: none; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 2.5%), 0 6px 18px rgb(0 0 0 / 20%); transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease, color var(--duration-fast) ease, transform var(--duration-fast) ease; }
+.ff-ai-brief-trigger::before { position: absolute; top: 0.28rem; right: 0.28rem; width: 0.3rem; height: 0.3rem; border: 1px solid #101917; border-radius: 999px; background: #66e0b2; box-shadow: 0 0 0 2px rgb(102 224 178 / 9%); content: ""; }
+.ff-ai-brief-trigger:hover,
+.ff-ai-brief-trigger.is-active { border-color: rgb(133 235 195 / 68%); background: #13211d; color: #c5f7e4; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%), 0 8px 22px rgb(0 0 0 / 26%); transform: translateY(-1px); }
+.ff-ai-brief-trigger:active { transform: translateY(0); }
+.ff-ai-brief-trigger:focus-visible { box-shadow: 0 0 0 2px rgb(79 209 161 / 38%), 0 8px 22px rgb(0 0 0 / 26%); }
+.ff-ai-brief-trigger:disabled { opacity: 0.42; }
+.ff-ai-brief-trigger svg { width: 1.08rem !important; height: 1.08rem !important; }
+.ff-ai-brief-trigger.is-loading svg { animation: ff-ai-breathe 900ms ease-in-out infinite alternate; }
+.ff-ai-brief-trigger::after { position: absolute; top: calc(100% + 0.45rem); right: 0; z-index: 120; width: max-content; max-width: 8rem; transform: translateY(-2px); border: 1px solid rgb(255 255 255 / 9%); border-radius: 0.45rem; background: #171a1e; padding: 0.3rem 0.45rem; color: #d9dde2; content: attr(data-tooltip); font-size: 0.62rem; font-weight: 680; line-height: 1; opacity: 0; pointer-events: none; transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease; }
+.ff-ai-brief-trigger:hover::after,
+.ff-ai-brief-trigger:focus-visible::after { transform: translateY(0); opacity: 1; }
+.ff-ai-brief-popover { position: absolute; top: calc(100% + 0.48rem); right: 0; z-index: 115; width: min(17rem, calc(100vw - 1rem)); max-height: min(28rem, 62vh); overflow: auto; border: 1px solid rgb(255 255 255 / 11%); border-radius: 0.82rem; background: #111417; padding: 0.7rem; box-shadow: 0 18px 55px rgb(0 0 0 / 48%); animation: ff-pop-in 120ms ease-out; }
+.ff-ai-brief-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.7rem; }
+.ff-ai-brief-head h3 { color: #f0f2f4; font-size: 0.78rem; font-weight: 760; }
+.ff-ai-brief-head p { margin-top: 0.14rem; color: #8c95a0; font-size: 0.66rem; line-height: 1.4; }
+.ff-ai-brief-close { display: grid; width: 1.8rem; height: 1.8rem; min-height: 1.8rem; flex: 0 0 auto; place-items: center; border-radius: 0.45rem; padding: 0; color: #828b96; font-size: 1rem; }
+.ff-ai-brief-close:hover { background: rgb(255 255 255 / 5%); color: #e9ecef; }
+.ff-ai-brief-content { gap: 0.48rem; margin-top: 0.7rem; padding-top: 0.7rem; color: #c1c7cf; font-size: 0.72rem; line-height: 1.55; }
+.ff-ai-brief-loading { display: flex; min-height: 5rem; align-items: center; justify-content: center; gap: 0.48rem; color: #9aa3ae; font-size: 0.7rem; }
+.ff-ai-brief-loading > span { width: 0.48rem; height: 0.48rem; border-radius: 999px; background: #7dd8b7; animation: ff-ai-breathe 750ms ease-in-out infinite alternate; }
+.ff-ai-brief-footer { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-top: 0.72rem; border-top: 1px solid rgb(255 255 255 / 7%); padding-top: 0.6rem; }
+.ff-ai-brief-footer span { color: #727c88; font-size: 0.62rem; }
+.ff-ai-brief-footer button { min-height: 1.9rem; border-radius: 0.5rem; padding-inline: 0.58rem; color: #94e4c5; font-size: 0.66rem; font-weight: 720; }
+.ff-ai-brief-footer button:hover:not(:disabled) { background: rgb(79 209 161 / 7%); color: #bff3df; }
+.ff-ai-brief-footer button:disabled { opacity: 0.45; }
+
+.ff-feedback-pin { width: 1.98rem; height: 1.98rem; border-color: rgb(255 255 255 / 30%); border-radius: 0.7rem; background: #11171d; box-shadow: 0 7px 20px rgb(0 0 0 / 42%), 0 0 0 1px rgb(255 255 255 / 3%); font-size: 0.7rem; }
+.ff-feedback-pin::after { bottom: -0.24rem; width: 0.46rem; height: 0.46rem; background: #11171d; }
+.ff-feedback-pin.is-designer { border-color: rgb(128 200 238 / 80%); color: #afe2fb; }
+.ff-feedback-pin.is-client { border-color: rgb(79 209 161 / 78%); color: #a6ebcf; }
+.ff-feedback-pin.is-draft { border-color: rgb(243 198 109 / 82%); color: #f5d28c; }
+.ff-feedback-pin:hover,
+.ff-feedback-pin:focus-visible,
+.ff-feedback-pin.is-active { background: #182028; box-shadow: 0 8px 22px rgb(0 0 0 / 46%), 0 0 0 3px rgb(255 255 255 / 8%); }
+
+
+.ff-workspace-feedback-head { position: relative; z-index: 8; overflow: visible; }
+.ff-workspace-activity li { gap: 0.68rem; padding: 0.76rem 0.2rem; }
+.ff-workspace-activity li p { font-size: 0.78rem; line-height: 1.5; }
+.ff-workspace-activity li small { margin-top: 0.2rem; font-size: 0.68rem; }
+.ff-workspace-activity-more { min-height: 2.5rem; font-size: 0.74rem; }
+.ff-canvas-toolbar > button.is-text { padding-inline: 0.68rem; font-size: 0.72rem; }
+.ff-canvas-zoom-input input { font-size: 0.73rem; }
+.ff-canvas-zoom-input > span:last-child { font-size: 0.62rem; }
+
+@keyframes ff-ai-breathe {
+  from { opacity: 0.5; transform: scale(0.88); }
+  to { opacity: 1; transform: scale(1.06); }
+}
+
 @keyframes ff-pop-in {
   from { opacity: 0; transform: translateY(-4px) scale(0.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -1772,8 +2040,8 @@
 }
 
 @media (max-width: 1180px) {
-  .ff-workspace-assets { width: 14.5rem; }
-  .ff-workspace-feedback { width: 17.5rem; }
+  .ff-workspace-assets { width: 15rem; }
+  .ff-workspace-feedback { width: 17rem; }
   .ff-workspace-presence { display: none; }
 }
 
@@ -1809,7 +2077,7 @@
     top: 0;
     bottom: 0;
     z-index: 40;
-    width: min(20rem, 92vw);
+    width: min(19rem, 92vw);
     border-block: 0;
     border-radius: 0;
     box-shadow: 0 20px 55px rgb(0 0 0 / 48%);
@@ -1839,8 +2107,9 @@
 
 @media (max-width: 760px) {
   .ff-workspace-header {
-    min-height: 3.5rem;
-    padding: 0.35rem 0.4rem;
+    min-height: 3.25rem;
+    gap: 0.25rem;
+    padding: 0.35rem 0.38rem;
   }
 
   .ff-workspace-back,
@@ -1850,6 +2119,8 @@
   }
 
   .ff-workspace-file-name,
+  .ff-workspace-file-version,
+  .ff-workspace-title-separator,
   .ff-workspace-review-direct {
     display: none;
   }
@@ -1882,7 +2153,7 @@
   }
 
   .ff-workspace-stage {
-    padding: 0.75rem 0.75rem 4.25rem;
+    padding: 0.65rem 0.65rem 3.8rem;
   }
 
   .ff-workspace-compare-selectors {
@@ -1946,6 +2217,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ff-invite-spinner,
+  .ff-workspace-refresh-dot,
   .ff-workspace-processing-mark,
   .ff-workspace-local-preview-dot,
   .ff-workspace-review-menu,
@@ -1967,7 +2239,8 @@
   .ff-workspace-file-expand,
   .ff-workspace-tab,
   .ff-canvas-toolbar > button,
-  .ff-canvas-help {
+  .ff-canvas-help,
+  .ff-feedback-pin {
     transition: none;
   }
 }
@@ -1975,4 +2248,645 @@
 [data-code-line][data-code-feedback-pending="true"] {
   background: rgb(251 191 36 / 8%) !important;
   box-shadow: inset 3px 0 0 rgb(251 191 36 / 72%);
+}
+
+/* Final feedback composer + AI brief polish */
+.ff-feedback-composer {
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.95rem;
+  background: #0f1113;
+  padding: 0.9rem;
+  box-shadow: 0 16px 42px rgb(0 0 0 / 24%);
+}
+
+.ff-feedback-composer.is-general {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.62rem 0.18rem 0.82rem;
+  box-shadow: none;
+}
+
+.ff-feedback-composer-head {
+  display: flex;
+  min-height: 1.55rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.ff-feedback-composer-head > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.48rem;
+}
+
+.ff-feedback-composer-head h3 {
+  overflow: hidden;
+  color: #f0f2f4;
+  font-size: 0.82rem;
+  font-weight: 740;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ff-feedback-composer-head > div > span {
+  flex: 0 0 auto;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.42rem;
+  background: rgb(255 255 255 / 2.5%);
+  padding: 0.16rem 0.38rem;
+  color: #8c95a0;
+  font-size: 0.62rem;
+  font-weight: 650;
+}
+
+.ff-feedback-composer-head > span {
+  color: #737c87;
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ff-feedback-composer-head > span.is-over-limit {
+  color: #f2a3ad;
+  font-weight: 720;
+}
+
+.ff-feedback-composer-textarea {
+  display: block;
+  width: 100%;
+  min-height: 5.25rem;
+  margin-top: 0.68rem;
+  resize: vertical;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 0.78rem;
+  background: #0b0d0f;
+  padding: 0.75rem 0.82rem;
+  color: #edf0f3;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease, background-color var(--duration-fast) ease;
+}
+
+.ff-feedback-composer.is-pinned .ff-feedback-composer-textarea {
+  min-height: 5.8rem;
+}
+
+.ff-feedback-composer-textarea::placeholder {
+  color: #626b76;
+}
+
+.ff-feedback-composer-textarea:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 15%);
+}
+
+.ff-feedback-composer-textarea:focus {
+  border-color: rgb(79 209 161 / 68%);
+  background: #0d1011;
+  box-shadow: 0 0 0 3px rgb(79 209 161 / 11%);
+}
+
+.ff-feedback-composer-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.ff-feedback-composer-voice {
+  margin-top: 0.68rem;
+}
+
+.ff-voice-recorder {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.ff-voice-record-button {
+  display: inline-flex;
+  width: max-content;
+  min-height: 2.3rem;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 0.68rem;
+  background: rgb(255 255 255 / 2.5%);
+  padding-inline: 0.78rem;
+  color: #d9dde2;
+  font-size: 0.76rem;
+  font-weight: 660;
+  transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease, color var(--duration-fast) ease;
+}
+
+.ff-voice-record-button:hover:not(:disabled),
+.ff-voice-record-button:focus-visible {
+  border-color: rgb(244 114 134 / 35%);
+  background: rgb(255 255 255 / 4.5%);
+  color: #fff;
+}
+
+.ff-voice-record-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ff-voice-record-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ff-voice-record-dot {
+  width: 0.52rem;
+  height: 0.52rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #fb7185;
+}
+
+.ff-voice-record-dot.is-live {
+  animation: ff-ai-breathe 760ms ease-in-out infinite alternate;
+}
+
+.ff-voice-status {
+  color: #8e97a3;
+  font-size: 0.74rem;
+}
+
+.ff-voice-recording {
+  display: flex;
+  min-height: 2.65rem;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid rgb(251 113 133 / 18%);
+  border-radius: 0.72rem;
+  background: rgb(251 113 133 / 5%);
+  padding-inline: 0.72rem;
+  color: #d9aeb5;
+  font-size: 0.74rem;
+}
+
+.ff-voice-timer {
+  color: #ffe1e5;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.76rem;
+  font-weight: 720;
+}
+
+.ff-voice-recording button {
+  min-height: 1.9rem;
+  margin-left: auto;
+  border-radius: 0.5rem;
+  background: #fda4af;
+  padding-inline: 0.65rem;
+  color: #3b0a12;
+  font-size: 0.7rem;
+  font-weight: 760;
+}
+
+.ff-voice-ready {
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0.72rem;
+  background: rgb(255 255 255 / 2%);
+  padding: 0.55rem;
+}
+
+.ff-voice-ready audio {
+  width: 100%;
+  height: 2.1rem;
+}
+
+.ff-voice-ready > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.ff-voice-ready > div > span {
+  color: #747d88;
+  font-size: 0.66rem;
+  font-weight: 560;
+}
+
+.ff-voice-ready > div > button {
+  min-height: 1.75rem;
+  border-radius: 0.45rem;
+  padding-inline: 0.5rem;
+  color: #9aa3ae;
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.ff-voice-ready > div > button:hover,
+.ff-voice-ready > div > button:focus-visible {
+  background: rgb(255 255 255 / 5%);
+  color: #f0f2f4;
+}
+
+.ff-feedback-upload-status {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  border-radius: 0.65rem;
+  background: rgb(80 164 210 / 8%);
+  padding: 0.58rem 0.68rem;
+  color: #a9d9f2;
+  font-size: 0.7rem;
+}
+
+.ff-feedback-upload-status progress {
+  width: 100%;
+  height: 0.26rem;
+  accent-color: #80c8ee;
+}
+
+.ff-feedback-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  margin-top: 0.72rem;
+}
+
+.ff-feedback-composer-cancel,
+.ff-feedback-composer-submit {
+  min-height: 2.3rem;
+  border-radius: 0.65rem;
+  padding-inline: 0.82rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition: border-color var(--duration-fast) ease, background-color var(--duration-fast) ease, color var(--duration-fast) ease, transform var(--duration-fast) ease;
+}
+
+.ff-feedback-composer-cancel {
+  border: 1px solid rgb(255 255 255 / 10%);
+  color: #b2b9c2;
+}
+
+.ff-feedback-composer-cancel:hover:not(:disabled),
+.ff-feedback-composer-cancel:focus-visible {
+  border-color: rgb(255 255 255 / 16%);
+  background: rgb(255 255 255 / 4%);
+  color: #f1f3f5;
+}
+
+.ff-feedback-composer-submit {
+  min-width: 4.4rem;
+  background: #4fd1a1;
+  color: #07130f;
+}
+
+.ff-feedback-composer-submit:hover:not(:disabled),
+.ff-feedback-composer-submit:focus-visible {
+  background: #68ddb1;
+}
+
+.ff-feedback-composer-cancel:focus-visible,
+.ff-feedback-composer-submit:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ff-feedback-composer-cancel:disabled,
+.ff-feedback-composer-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ff-feedback-composer.is-general .ff-feedback-composer-actions {
+  margin-top: 0.68rem;
+}
+
+.ff-ai-brief-trigger {
+  display: inline-flex;
+  width: auto;
+  min-width: 2.72rem;
+  height: 2.08rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.26rem;
+  border-color: rgb(122 224 185 / 48%);
+  border-radius: 0.62rem;
+  background: linear-gradient(180deg, #12211c 0%, #101916 100%);
+  padding-inline: 0.48rem;
+  color: #a8ecd1;
+}
+
+.ff-ai-brief-trigger::before {
+  display: none;
+}
+
+.ff-ai-brief-trigger > span {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+}
+
+.ff-ai-brief-trigger svg {
+  width: 0.94rem !important;
+  height: 0.94rem !important;
+}
+
+.ff-ai-brief-trigger:hover,
+.ff-ai-brief-trigger.is-active {
+  border-color: rgb(143 238 201 / 70%);
+  background: linear-gradient(180deg, #172a23 0%, #12201b 100%);
+  color: #d0fae9;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%), 0 8px 22px rgb(0 0 0 / 25%);
+}
+
+.ff-ai-brief-trigger.is-active::after {
+  display: none;
+}
+
+.ff-ai-brief-popover {
+  position: fixed;
+  z-index: 320;
+  overflow: auto;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 0.86rem;
+  background: #101315;
+  padding: 0.72rem;
+  box-shadow: 0 20px 58px rgb(0 0 0 / 54%);
+  animation: ff-pop-in 120ms ease-out;
+}
+
+.ff-ai-brief-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding-bottom: 0.62rem;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+}
+
+.ff-ai-brief-head h3 {
+  color: #f3f5f6;
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.ff-ai-brief-head p {
+  margin-top: 0.08rem;
+  color: #77818c;
+  font-size: 0.64rem;
+}
+
+.ff-ai-brief-close {
+  width: 1.8rem;
+  height: 1.8rem;
+  min-height: 1.8rem;
+}
+
+.ff-ai-brief-empty,
+.ff-ai-brief-error {
+  padding: 0.9rem 0.1rem 0.72rem;
+}
+
+.ff-ai-brief-empty strong,
+.ff-ai-brief-error strong {
+  display: block;
+  color: #e8ebee;
+  font-size: 0.75rem;
+  font-weight: 730;
+}
+
+.ff-ai-brief-empty p,
+.ff-ai-brief-error p {
+  margin-top: 0.28rem;
+  color: #8b949f;
+  font-size: 0.69rem;
+  line-height: 1.48;
+}
+
+.ff-ai-brief-error {
+  border-bottom: 1px solid rgb(239 154 164 / 12%);
+}
+
+.ff-ai-brief-error strong {
+  color: #f0adb5;
+}
+
+.ff-ai-brief-error details {
+  margin-top: 0.55rem;
+  color: #727c87;
+  font-size: 0.62rem;
+}
+
+.ff-ai-brief-error summary {
+  cursor: pointer;
+  width: max-content;
+}
+
+.ff-ai-brief-error code {
+  display: block;
+  margin-top: 0.35rem;
+  overflow-wrap: anywhere;
+  color: #8f98a3;
+  font-size: 0.58rem;
+}
+
+.ff-ai-brief-content {
+  display: grid;
+  gap: 0.46rem;
+  margin-top: 0.7rem;
+  padding: 0.1rem 0 0.2rem;
+  color: #c9cfd6;
+  font-size: 0.72rem;
+  line-height: 1.52;
+}
+
+.ff-ai-brief-content h4 {
+  margin-top: 0.2rem;
+  color: #eef1f3;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.ff-ai-brief-item {
+  display: flex;
+  gap: 0.42rem;
+}
+
+.ff-ai-brief-item > span:first-child {
+  color: #6dddb4;
+}
+
+.ff-ai-brief-loading {
+  min-height: 5.5rem;
+  font-size: 0.7rem;
+}
+
+.ff-ai-brief-footer {
+  margin-top: 0.62rem;
+  padding-top: 0.58rem;
+}
+
+.ff-ai-brief-footer span {
+  color: #68727e;
+  font-size: 0.6rem;
+}
+
+.ff-ai-brief-footer button {
+  min-height: 2rem;
+  border: 1px solid rgb(79 209 161 / 20%);
+  border-radius: 0.52rem;
+  background: rgb(79 209 161 / 7%);
+  padding-inline: 0.62rem;
+  color: #9be7c9;
+  font-size: 0.67rem;
+  font-weight: 740;
+}
+
+.ff-ai-brief-footer button:hover:not(:disabled),
+.ff-ai-brief-footer button:focus-visible {
+  border-color: rgb(79 209 161 / 38%);
+  background: rgb(79 209 161 / 11%);
+  color: #c6f6e3;
+}
+
+@media (max-width: 560px) {
+  .ff-feedback-composer {
+    padding: 0.78rem;
+  }
+
+  .ff-feedback-composer.is-general {
+    padding-inline: 0;
+  }
+
+  .ff-feedback-composer-textarea {
+    min-height: 4.8rem;
+    font-size: 0.8rem;
+  }
+
+  .ff-feedback-composer-actions {
+    gap: 0.38rem;
+  }
+
+  .ff-feedback-composer-cancel,
+  .ff-feedback-composer-submit {
+    min-height: 2.2rem;
+    padding-inline: 0.72rem;
+  }
+}
+
+/* Final navigation rhythm + AI placement polish. */
+@media (min-width: 761px) {
+  .ff-workspace-header {
+    min-height: 3.7rem;
+    gap: 0.88rem;
+    padding-inline: 0.82rem;
+  }
+
+  .ff-workspace-header-nav {
+    gap: 0.34rem;
+    padding-right: 0.9rem;
+  }
+
+  .ff-workspace-title {
+    padding-right: 0.7rem;
+  }
+
+  .ff-workspace-presence {
+    gap: 0.48rem;
+    padding-inline: 0.08rem 0.12rem;
+  }
+
+  .ff-workspace-actions {
+    gap: 0.4rem;
+    padding-left: 0.88rem;
+  }
+
+  .ff-workspace-actions .ff-workspace-menu-wrap {
+    margin-left: 0.12rem;
+    padding-left: 0.5rem;
+    border-left: 1px solid rgb(255 255 255 / 8%);
+  }
+
+  .ff-workspace-actions .ff-workspace-icon-button {
+    border-color: rgb(255 255 255 / 6%) !important;
+    background: rgb(255 255 255 / 1.8%) !important;
+  }
+
+  .ff-workspace-actions .ff-workspace-icon-button:hover,
+  .ff-workspace-actions .ff-workspace-icon-button.is-active {
+    border-color: rgb(255 255 255 / 11%) !important;
+    background: #111418 !important;
+  }
+}
+
+.ff-workspace-feedback-tabs {
+  gap: 0.75rem;
+}
+
+.ff-workspace-feedback-tab-tools {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ff-workspace-feedback-actions {
+  gap: 0.42rem;
+}
+
+.ff-ai-brief-trigger {
+  min-width: 4.55rem;
+  height: 2.08rem;
+  gap: 0.34rem;
+  border-color: rgb(111 221 178 / 36%);
+  border-radius: 0.66rem;
+  background: #0f1815;
+  padding-inline: 0.58rem;
+  color: #a9ebd2;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 2%);
+}
+
+.ff-ai-brief-trigger > span {
+  font-size: 0.64rem;
+  font-weight: 780;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.ff-ai-brief-trigger svg {
+  width: 0.92rem !important;
+  height: 0.92rem !important;
+  border-radius: 0.28rem;
+  color: #75deb7;
+}
+
+.ff-ai-brief-trigger:hover,
+.ff-ai-brief-trigger.is-active {
+  border-color: rgb(125 229 189 / 60%);
+  background: #14211c;
+  color: #d1f8e9;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%), 0 7px 20px rgb(0 0 0 / 22%);
+}
+
+@media (max-width: 760px) {
+  .ff-workspace-feedback-tabs {
+    padding-inline: 0.55rem;
+  }
+
+  .ff-ai-brief-trigger {
+    min-width: 2.2rem;
+    width: 2.2rem;
+    padding-inline: 0;
+  }
+
+  .ff-ai-brief-trigger > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
 }

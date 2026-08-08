@@ -15,12 +15,16 @@ describe("feedback keyboard shortcuts", () => {
     expect(shouldSubmitFeedbackOnKeyDown(base)).toBe(true);
   });
 
-  it("keeps Shift+Enter available for a new line", () => {
-    expect(shouldSubmitFeedbackOnKeyDown({ ...base, shiftKey: true })).toBe(false);
+  it("submits general feedback with Enter", () => {
+    expect(shouldSubmitFeedbackOnKeyDown({ ...base, isPinned: false })).toBe(true);
   });
 
-  it("uses Ctrl or Command plus Enter for general feedback", () => {
-    expect(shouldSubmitFeedbackOnKeyDown({ ...base, isPinned: false })).toBe(false);
+  it("keeps Shift+Enter available for a new line", () => {
+    expect(shouldSubmitFeedbackOnKeyDown({ ...base, shiftKey: true })).toBe(false);
+    expect(shouldSubmitFeedbackOnKeyDown({ ...base, isPinned: false, shiftKey: true })).toBe(false);
+  });
+
+  it("still accepts Ctrl or Command plus Enter", () => {
     expect(shouldSubmitFeedbackOnKeyDown({ ...base, isPinned: false, ctrlKey: true })).toBe(true);
     expect(shouldSubmitFeedbackOnKeyDown({ ...base, isPinned: false, metaKey: true })).toBe(true);
   });

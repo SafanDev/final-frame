@@ -162,7 +162,12 @@ export default function FeedbackSidebar() {
             </button>
           ))}
         </div>
-        <Button variant="ghost" size="icon" onClick={() => setIsFeedbackSidebarOpen(false)} aria-label="Close feedback panel" className="ff-workspace-mobile-close lg:hidden">×</Button>
+        <div className="ff-workspace-feedback-tab-tools">
+          {rightSidebarTab === "FEEDBACK" && activeAsset && isOwner && !isCompareMode && activeAsset.comments.length > 0 ? (
+            <AiSummaryPanel projectId={projectId} assetId={activeAsset.id} commentCount={activeAsset.comments.length} />
+          ) : null}
+          <Button variant="ghost" size="icon" onClick={() => setIsFeedbackSidebarOpen(false)} aria-label="Close feedback panel" className="ff-workspace-mobile-close lg:hidden">×</Button>
+        </div>
       </div>
 
       {rightSidebarTab === "ACTIVITY" ? (
@@ -175,10 +180,10 @@ export default function FeedbackSidebar() {
             <>
               <div className="ff-workspace-feedback-head">
                 <div className="ff-workspace-feedback-head-row">
-                  <div className="min-w-0"><h2>Feedback</h2><p className="truncate">{activeAsset.fileName} · {openCount} open</p></div>
-                  <div className="flex gap-1.5">
-                    {!isLocked && !isCompareMode ? <Button size="sm" variant={showComposer ? "secondary" : "primary"} onClick={() => setShowComposer((current) => !current)}>{showComposer ? "Close" : "Add"}</Button> : null}
-                    <Button size="sm" variant={showFilters ? "secondary" : "ghost"} onClick={() => setShowFilters((current) => !current)} aria-expanded={showFilters}>Filter</Button>
+                  <div className="ff-workspace-feedback-file"><h2 title={activeAsset.fileName}>{activeAsset.fileName}</h2><p>{openCount} open feedback</p></div>
+                  <div className="ff-workspace-feedback-actions">
+                    {!isLocked && !isCompareMode ? <Button className="ff-workspace-feedback-add" size="sm" variant={showComposer ? "secondary" : "primary"} onClick={() => setShowComposer((current) => !current)}>{showComposer ? "Close" : "+ Add"}</Button> : null}
+                    <Button className="ff-workspace-feedback-filter" size="sm" variant={showFilters ? "secondary" : "ghost"} onClick={() => setShowFilters((current) => !current)} aria-expanded={showFilters}>Filter</Button>
                   </div>
                 </div>
 
@@ -195,10 +200,8 @@ export default function FeedbackSidebar() {
                 {isLocked ? <InlineAlert tone="warning" title="Read-only project" className="mb-3">Feedback history is preserved but cannot be changed.</InlineAlert> : null}
 
                 {showComposer && !isLocked && !isCompareMode ? (
-                  <CommentComposer compact projectId={projectId} assetId={activeAsset.id} title="General feedback" placeholder="Add feedback for the whole file…" onCreated={handleCreated} onCancel={() => setShowComposer(false)} />
+                  <CommentComposer compact projectId={projectId} assetId={activeAsset.id} title="General feedback" placeholder="Write a note about this file…" submitLabel="Post" onCreated={handleCreated} onCancel={() => setShowComposer(false)} />
                 ) : null}
-
-                {isOwner && !isCompareMode && activeAsset.comments.length > 0 ? <AiSummaryPanel projectId={projectId} assetId={activeAsset.id} commentCount={activeAsset.comments.length} /> : null}
 
                 <div className="ff-workspace-comments-head"><h3>Comments</h3><span>{displayedComments.length}</span></div>
 
