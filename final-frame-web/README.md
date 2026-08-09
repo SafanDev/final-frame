@@ -1,17 +1,17 @@
 # FinalFrame Web
 
-The web app contains the public page, account screens, project dashboard and review workspace.
+The web app contains the public page, account screens, project dashboard, and review workspace.
 
 ## Setup
 
-Copy `.env.example` to `.env.local`, then run:
+Use Node.js `24.18.0` and npm `11.16.0`.
+
+Copy `.env.example` to `.env.local`, add local values, then run:
 
 ```bash
 npm ci
 npm run dev
 ```
-
-Use Node.js 24.18.0 and npm 11.16.0.
 
 ## Checks
 
@@ -21,11 +21,15 @@ npm run test:e2e
 npm run lighthouse
 ```
 
-The browser API URL must use the same public origin with the `/backend` path. Private files must not use public object URLs.
+## Routing
 
-## Design rules
+Browser API requests use the same public origin through `/backend`. Server-only API traffic uses the private API URL.
 
-- Keep wording short and clear.
+Private files must be opened through authorized app routes, not public storage URLs.
+
+## Frontend rules
+
 - Keep controls keyboard accessible.
-- Do not add large libraries for small visual effects.
-- Do not expose server secrets through `NEXT_PUBLIC_*` values.
+- Keep server secrets out of `NEXT_PUBLIC_*` values.
+- Avoid adding large client-side dependencies for small UI effects.
+- Keep public pages light and product code scoped to product routes.

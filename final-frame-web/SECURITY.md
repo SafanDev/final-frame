@@ -1,25 +1,32 @@
 # Security
 
-Report security problems privately to the person who runs the app. Do not post secrets, customer files or exploit details in a public issue.
+If you find a security issue, report it privately to the repository owner. Do not post secrets, private files, or exploit details in a public issue.
 
-## Main controls
+## Access and accounts
 
-- The API makes every access decision.
-- Sessions use Secure and HttpOnly cookies in HTTPS environments.
-- Rate limits protect account, upload and realtime routes.
+- The API makes the final access decision for private data.
+- HTTPS sessions use Secure and HttpOnly cookies.
 - MFA supports authenticator codes and one-time recovery codes.
-- Files stay private and use short-lived links.
-- Original downloads are checked by the API.
-- Uploaded files are checked before a safe review copy is created.
-- CSP and security headers are set by the web app.
-- Approval records use signed evidence.
+- Rate limits protect account, upload, and realtime routes.
+- Sensitive account changes can end existing sessions.
+
+## Files
+
+- Uploaded files stay private.
+- Review copies are checked before use.
+- Original downloads are authorized by the API.
+- Short-lived links are used where direct storage access is needed.
+
+## Browser security
+
+The web app sets CSP and other security headers. Browser-facing configuration must not contain server secrets.
 
 ## Secrets
 
-Never commit database URLs, session secrets, R2 keys, Resend keys, OpenRouter keys, monitoring tokens or real `.env` files.
+Never commit database URLs, session secrets, storage keys, email-provider keys, AI-provider keys, monitoring tokens, or real `.env` files.
 
-Only public browser settings may use the `NEXT_PUBLIC_` prefix.
+Only values that are safe to expose in the browser may use the `NEXT_PUBLIC_` prefix.
 
 ## Email-disabled mode
 
-Turning email delivery off does not weaken password, MFA, session, rate-limit or invite-token checks. It does mean the app cannot prove ownership of an email address or send reset links. Use a verified email provider before relying on email ownership as part of an account policy.
+The app can run with email delivery disabled. Password, MFA, session, rate-limit, and invite-token checks still apply, but email ownership and email reset links are unavailable until a verified email provider is configured.

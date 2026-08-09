@@ -1,10 +1,8 @@
 # Release validation
 
-Use Node.js 24.18.0 and npm 11.16.0.
+Use Node.js `24.18.0` and npm `11.16.0`.
 
-## Readiness definitions
-
-A clean repository can be considered **source-ready / deployment-ready** after the source, API, web and CI gates below pass. **Deployment approval** is a separate operational state and requires the staging/domain, backup-restore, load/SLO and operator checks against the actual hosting environment. Publishing the repository does not require operating a public production service.
+A clean repository can be treated as source-ready after the source, API, web, and CI checks pass. A real deployment still needs the staging, restore, load, and operator checks for the chosen hosting environment.
 
 ## Source checks
 
@@ -31,11 +29,11 @@ npm run test:e2e
 npm run lighthouse
 ```
 
-The authenticated E2E suite must prove wrong-account invitation rejection, one-time invitation consumption, cross-tenant API denial, cross-tenant Socket.IO join denial, removal from realtime access, locked-original denial, safe derivative access, Client approval and signed evidence. HTTPS staging also verifies the session cookie remains HttpOnly, Lax, Secure and host-only.
+The authenticated browser tests cover invitation rules, cross-project access, private-file access, realtime joins, approval flow, and signed approval evidence.
 
 ## Production-like staging checks
 
-Use the same public-origin pattern intended for release: web routes plus `/backend` API and Socket.IO on one HTTPS hostname.
+Use one HTTPS public origin for the web app, `/backend` API routes, and Socket.IO.
 
 ```bash
 cd final-frame-api
@@ -44,11 +42,11 @@ LOAD_TEST_BASE_URL=https://staging.example.com npm run ops:load-slo
 npm run ops:dead-letter -- --action=list --require-empty=true
 ```
 
-The deployed-security probe checks production response headers, CSP/HSTS, private-route cache/indexing controls, untrusted CORS behavior and cross-site mutation rejection. The load probe is GET-only and enforces the configured request-count, p95 and error-rate SLO.
+These checks cover deployed security headers, private-route behavior, CORS/cross-site protection, basic read-only load, and unresolved email/storage dead letters.
 
 ## Backup restore drill
 
-Restore the latest real backup into a disposable database with PostgreSQL client tools installed:
+Restore a real backup into a disposable PostgreSQL database before using backup-restore evidence for a production migration.
 
 ```bash
 cd final-frame-api
@@ -60,23 +58,21 @@ RESTORE_DRILL_CONFIRM_DATABASE=finalframe_restore \
 npm run ops:restore-drill
 ```
 
-Only after the drill succeeds may `BACKUP_RESTORE_TESTED=true` and `BACKUP_RESTORE_VERIFIED_AT=<verifiedAt>` be used for the production migration preflight.
+Only after a successful drill should `BACKUP_RESTORE_TESTED=true` and `BACKUP_RESTORE_VERIFIED_AT=<verifiedAt>` be used.
 
 ## Manual checks
 
-Confirm registration, sign-in, MFA, password change, project creation, copied invite links, file upload, safe preview, comments, review status changes, approval evidence, account export and account deletion.
+Confirm registration, sign-in, MFA, password change, project creation, invitations, upload, preview, feedback, review status, approval, export, and account deletion.
 
-When email is disabled, confirm that reset and verification actions are hidden and that no email job is created. When AI/transcription is enabled, confirm the deployed privacy disclosure and workspace consent controls match the configured providers.
+If email, AI summaries, or transcription are enabled, confirm the related settings and privacy text match the providers in use.
 
 ## Final checks
 
-- no real `.env` file is included
-- no build output, test report or local log is included
-- migrations are complete and in order
-- public routes contain no private file URL
-- latest database/storage backup has been restored and checked
-- email and storage dead-letter queues are empty or every item has an operator disposition
-- staging load/SLO and deployed security checks pass
-- authenticated accessibility/browser suites have no skipped critical path in CI
-- privacy, retention, AI and transcription disclosures match the enabled runtime behavior
-- configured limits and provider billing alerts are set
+- no real `.env` files, build output, test reports, or local logs are included
+- migrations are complete and ordered
+- private files are not exposed through public URLs
+- backup restore has been tested for the target environment
+- email and storage dead letters are empty or reviewed
+- staging security and load checks pass
+- browser and accessibility checks pass
+- provider limits and billing alerts are configured where needed

@@ -1,39 +1,39 @@
-# Operations
+# Operations runbook
 
-## Daily checks
+## Routine checks
 
-Check API readiness, Redis, database connections, ClamAV, storage access and background queues.
+Check API readiness, PostgreSQL, Redis, ClamAV, storage access, and background queues.
 
-Important queue metrics include:
+Useful queue metrics include:
 
 - `finalframe_project_deletions`
 - `finalframe_storage_deletion_tasks`
 - `finalframe_email_outbox_messages` when email is enabled
 - preview-processing failures and worker success timestamps
 
-Any `status="ABANDONED"` email or storage series is a dead letter and must be investigated. Prometheus rules alert on both queues.
+A queue item with `status="ABANDONED"` needs review.
 
 ## Dead-letter inspection and replay
 
-List dead letters without changing data:
+List unresolved items without changing data:
 
 ```bash
 cd final-frame-api
 npm run ops:dead-letter -- --action=list --require-empty=true
 ```
 
-If the command returns an abandoned item, investigate the provider/storage failure first. Replay only one reviewed item at a time and confirm its exact identifier:
+Fix the underlying provider or storage problem before replaying an item. Replay one reviewed item at a time and confirm its exact ID:
 
 ```bash
 npm run ops:dead-letter -- --action=replay --kind=email --id=<id> --confirm=<id>
 npm run ops:dead-letter -- --action=replay --kind=storage --id=<id> --confirm=<id>
 ```
 
-Replay resets automatic-attempt accounting and schedules the durable worker to try again. It does not directly send email or delete an object from the operator process.
+Replay schedules the normal worker to try again; it does not send email or delete storage directly from the operator command.
 
 ## Backup restore drill
 
-A production migration is not approved by merely setting the backup evidence variables. Perform a real restore into a disposable PostgreSQL database first. The drill refuses to target the source database and requires exact target confirmation.
+Restore into a disposable PostgreSQL database. Never use the source database as the drill target.
 
 ```bash
 cd final-frame-api
@@ -45,17 +45,13 @@ RESTORE_DRILL_CONFIRM_DATABASE=finalframe_restore \
 npm run ops:restore-drill
 ```
 
-Record the emitted `verifiedAt` timestamp, then set `BACKUP_RESTORE_TESTED=true` and `BACKUP_RESTORE_VERIFIED_AT` to that real drill time for the release migration. Never restore a drill backup over the source database.
+Keep the successful `verifiedAt` value with the release record.
 
-## Staging security and SLO checks
-
-Verify the public security boundary against the exact staging hostname:
+## Staging security and load checks
 
 ```bash
 DEPLOYED_BASE_URL=https://staging.example.com npm run ops:verify-deployed-security
 ```
-
-Run the safe GET-only SLO probe against the same origin:
 
 ```bash
 LOAD_TEST_BASE_URL=https://staging.example.com \
@@ -66,26 +62,26 @@ LOAD_TEST_MAX_ERROR_RATE=0.01 \
 npm run ops:load-slo
 ```
 
-The default paths exercise the public page, web health and API liveness route. For an authenticated staging run, add an authorized read-only path such as `/backend/api/projects?limit=25` to `LOAD_TEST_PATHS` and provide a short-lived staging-only cookie with `LOAD_TEST_COOKIE`. Never put production cookies in shell history or CI logs.
+The load command is GET-only. If an authenticated read path is added, use a short-lived staging-only cookie and keep it out of shell history and logs.
 
 ## Common problems
 
 ### Sign-in fails
 
-Check the shared session secret, cookie name, public URL, API route and system time.
+Check the session secret, cookie name, public URL, API route, and system time.
 
 ### Upload fails
 
-Check storage keys, bucket access, upload size limits, ClamAV and preview worker logs.
+Check storage access, upload limits, ClamAV, and preview-worker logs.
 
 ### Realtime updates stop
 
-Check Redis, Socket.IO routing, proxy timeouts and connection limits. Cross-tenant Socket.IO joins are expected to emit `PROJECT_ACCESS_DENIED`.
+Check Redis, Socket.IO routing, proxy timeouts, and connection limits. Unauthorized cross-project joins should return `PROJECT_ACCESS_DENIED`.
 
 ### A delete stays pending
 
-Check the project deletion and storage cleanup queues. Keep the record until all private objects are removed or the failure is reviewed.
+Check the project-deletion and storage-cleanup queues. Keep the record until required private objects are removed or the failure is reviewed.
 
-## Incident rule
+## Incident handling
 
-Do not delete logs or audit records while an incident is being reviewed. Rotate exposed secrets, end affected sessions and record the exact release involved.
+Keep logs and audit records while an incident is being investigated. Rotate exposed secrets, end affected sessions, and record the release involved.

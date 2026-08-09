@@ -1,17 +1,16 @@
-# FinalFrame monitoring
+# Monitoring
 
-Scrape each private API replica at `/metrics` with the configured bearer token. Do not route this endpoint through the public application listener.
+Scrape each private API instance at `/metrics` with the configured bearer token. Do not expose this endpoint through the public app route.
 
-Load `finalframe-alerts.yml` into Prometheus or a compatible ruler. The thresholds are safe starting points, not universal production values. Adjust latency and memory limits after observing real traffic, but keep dependency, worker-stall and server-error alerts enabled.
+Load `finalframe-alerts.yml` into Prometheus or a compatible rule engine. Adjust latency and memory thresholds after observing real traffic, but keep dependency, worker, queue, and server-error alerts enabled.
 
-Recommended dashboard panels:
+Useful dashboard panels:
 
-- API request rate, 5xx ratio and p50/p95/p99 duration
-- PostgreSQL and Redis readiness by replica
-- Connected realtime sockets and rejected socket authentication
-- Worker duration, failures, processed items and time since last success
-- Email/storage durable queue counts by status, with `ABANDONED` treated as operator-owned dead letters
-- RSS and heap use by release and replica
-- Deployment annotations using the release identifier from structured logs
+- request rate, 5xx rate, and p50/p95/p99 response time
+- PostgreSQL and Redis readiness
+- connected realtime sockets and rejected authentication
+- worker duration, failures, and last successful run
+- email and storage queue counts, especially `ABANDONED` items
+- process memory by release and instance
 
-Alert delivery should have an assigned primary and backup responder. Rehearse one API outage, one Redis outage, one worker failure and one failed migration preflight before launch.
+Assign someone to receive alerts before running the app for real users.

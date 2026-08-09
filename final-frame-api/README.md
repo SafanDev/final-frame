@@ -1,10 +1,12 @@
 # FinalFrame API
 
-The API handles accounts, projects, files, feedback, approvals, notifications and realtime updates.
+The API handles accounts, projects, files, feedback, approvals, notifications, background work, and realtime updates.
 
 ## Setup
 
-Copy `.env.example` to `.env`, then run:
+Use Node.js `24.18.0` and npm `11.16.0`.
+
+Copy `.env.example` to `.env`, add local values, then run:
 
 ```bash
 npm ci
@@ -13,9 +15,7 @@ npm run db:migrate:dev
 npm run dev
 ```
 
-Use Node.js 24.18.0 and npm 11.16.0.
-
-## Useful checks
+## Checks
 
 ```bash
 npm run check
@@ -23,15 +23,20 @@ npm run build
 npm run test:core
 ```
 
-## Email
+## Services
 
-Use `EMAIL_DELIVERY_MODE=disabled` when no email provider is available. Registration, sign-in, in-app notices and copied invite links still work. Email verification and email reset links stay off.
+The API expects PostgreSQL and Redis. File review also uses private S3-compatible storage and ClamAV.
 
-Use `EMAIL_DELIVERY_MODE=resend` only after adding `RESEND_API_KEY` and `EMAIL_FROM_ADDRESS`.
+Email can stay disabled during local development:
 
-## Important rules
+```env
+EMAIL_DELIVERY_MODE=disabled
+REQUIRE_EMAIL_VERIFICATION=false
+```
 
-- Keep real environment files out of Git.
-- Run every Prisma migration in order. Do not delete or rename migration folders.
-- Keep Redis enabled for shared rate limits and realtime work across API replicas.
-- Keep ClamAV and private object storage enabled for file review.
+## Notes
+
+- Keep real `.env` files out of Git.
+- Keep Prisma migrations in order; do not rename or remove applied migration folders.
+- Use private storage for uploaded files.
+- Keep Redis available for shared rate limits and realtime work.
