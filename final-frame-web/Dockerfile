@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24.18.0-alpine AS dependencies
+FROM node:26.8-alpine AS dependencies
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json package-lock.json ./
 COPY scripts/verify-runtime.mjs ./scripts/verify-runtime.mjs
 RUN npm ci --no-audit --no-fund
 
-FROM node:24.18.0-alpine AS builder
+FROM node:26.8-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NEXT_OUTPUT=standalone \
@@ -40,7 +40,7 @@ COPY . .
 RUN NEXTAUTH_SECRET="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("base64url"))')" npm run build \
     && npm run performance:budget
 
-FROM node:24.18.0-alpine AS runner
+FROM node:26.8-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
