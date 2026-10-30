@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24.18.0-bookworm-slim AS dependencies
+FROM node:26.12.0-bookworm-slim AS dependencies
 WORKDIR /app
 ENV NODE_ENV=development
 RUN apt-get update \
@@ -23,7 +23,7 @@ COPY prisma.config.ts ./
 COPY scripts ./scripts
 ENTRYPOINT ["npm", "run", "db:migrate:deploy"]
 
-FROM node:24.18.0-bookworm-slim AS production-dependencies
+FROM node:26.12.0-bookworm-slim AS production-dependencies
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update \
@@ -33,7 +33,7 @@ COPY package.json package-lock.json ./
 COPY scripts/verify-runtime.mjs ./scripts/verify-runtime.mjs
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
-FROM node:24.18.0-bookworm-slim AS runtime
+FROM node:26.12.0-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
